@@ -31,8 +31,8 @@ async function ingestChunk(db,{manifestSha256,chunkIndex,records,onBatch=()=>{}}
  const ids=[];let inserted=0;
  // Committed raw rows remain immutable if a later batch fails. A retry reuses
  // the exact source/hash tuple; the final chunk binding is atomic and checked.
- for(let offset=0;offset<records.length;offset+=250){
-  const batch=records.slice(offset,offset+250);
+ for(let offset=0;offset<records.length;offset+=1000){
+  const batch=records.slice(offset,offset+1000);
   // Send canonical source bytes once. PostgreSQL reconstructs ordinary JSON
   // and its message; only lossless transport envelopes need a separate value.
   const incoming=batch.map(({raw_payload,raw_message,...r})=>({...r,

@@ -29,7 +29,17 @@ async function main(){
   for(let i=0;i<2;i++){assert.equal(stored[i].raw_payload_text,stableJson(raw[i]));assert.equal(stored[i].source_created_on,null);verifySourceContent(stored[i]);}
   assert.equal(Buffer.from(stored[1].raw_payload._lossless_raw_evidence.original_payload_base64,'base64').toString('utf8'),stableJson(raw[1]));
   const job=(await db.query('SELECT public.create_immutable_snapshot_normalization_job($1,$2) result',[digest,scope])).rows[0].result;assert.equal(Number(job.expected_rows),2);
-  const result={status:'PASS',synthetic_only:true,production_mutations:0,checks:['Tampered chunk bytes rejected before ingestion','Source whitespace preserved','Null-byte payload preserved in lossless evidence','Raw canonical bytes survive PostgreSQL round trip','Exact retries reuse two rows without mutation','Unknown source timestamps stay null','Verified chunk creates exact two-row normalization job']};
+  const restartScope='SYNTHETIC-INGEST-RESTART-'+crypto.randomUUID();
+  const restartRaw=Array.from({length:1001},(_,i)=>({id:'SYNTHETIC-'+String(i).padStart(5,'0'),description:'SYNTHETIC WTS Rolex 126610LN USD 12000',synthetic_fixture:true}));
+  const restartBytes=Buffer.from(restartRaw.map(stableJson).join('\n')+'\n');
+  const restartChunk={rows:1001,first_id:restartRaw[0].id,last_id:restartRaw[1000].id,canonical_sha256:hash(restartBytes),canonical_bytes:restartBytes.length};
+  const restartManifest={...manifest,source_system:restartScope,rows:1001,expected_rows:1001,minimum_id:restartChunk.first_id,maximum_id:restartChunk.last_id,chunks:[restartChunk]},restartText=stableJson(restartManifest),restartHash=hash(restartText);
+  await db.query('SELECT public.register_immutable_source_snapshot($1,$2)',[restartText,restartHash]);const restartRecords=prepareChunk(restartBytes,restartChunk,restartManifest);
+  await assert.rejects(ingestChunk(db,{manifestSha256:restartHash,chunkIndex:0,records:restartRecords,onBatch:progress=>{assert.equal(progress.committed_rows,1000);throw new Error('SYNTHETIC_INTERRUPTION');}}),/SYNTHETIC_INTERRUPTION/);
+  assert.equal((await db.query('SELECT count(*)::int n FROM wf_canonical_staging.mariadb_raw_source_rows WHERE source_system=$1',[restartScope])).rows[0].n,1000);
+  const resumed=await ingestChunk(db,{manifestSha256:restartHash,chunkIndex:0,records:restartRecords});assert.equal(resumed.new_rows,1);assert.equal(resumed.identical_rows,1000);
+  const restartJob=(await db.query('SELECT public.create_immutable_snapshot_normalization_job($1,$2) result',[restartHash,restartScope])).rows[0].result;assert.equal(Number(restartJob.expected_rows),1001);
+  const result={status:'PASS',synthetic_only:true,production_mutations:0,checks:['Tampered chunk bytes rejected before ingestion','Source whitespace preserved','Null-byte payload preserved in lossless evidence','Raw canonical bytes survive PostgreSQL round trip','Exact retries reuse two rows without mutation','Unknown source timestamps stay null','Verified chunk creates exact two-row normalization job','Interrupted 1000-row transaction checkpoint resumes with one new and 1000 identical records; exact 1001-member boundary reconciles']};
   if(process.env.DISPOSABLE_REPORT_PATH)fs.writeFileSync(process.env.DISPOSABLE_REPORT_PATH,JSON.stringify(result,null,2));console.log(JSON.stringify(result));
  }finally{await db.end();}
 }
