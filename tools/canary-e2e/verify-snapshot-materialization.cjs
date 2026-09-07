@@ -12,9 +12,11 @@ for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'
  const rpc=(name,args)=>JSON.parse(sql('SELECT public.'+name+'('+args.map(literal).join(',')+');'));
  sql(fs.readFileSync(path.join(repo,'supabase/migrations/20260909040000_snapshot_bound_materialization.sql'),'utf8'));
  sql(fs.readFileSync(path.join(repo,'supabase/migrations/20260909050000_snapshot_observation_metadata.sql'),'utf8'));
+ sql(fs.readFileSync(path.join(repo,'supabase/migrations/20260909060000_exact_raw_dealer_lineage.sql'),'utf8'));
  const scope='SYNTHETIC-VERSION-'+crypto.randomUUID(),job=scope,raws=[];
+ const phone='1999'+String(crypto.randomInt(100000000,999999999));
  for(const revision of [1,2]){
-  const payload={id:'SYNTHETIC-001',description:'SYNTHETIC WTS Rolex 126610LN USD 12000',synthetic_fixture:true,revision};
+  const payload={id:'SYNTHETIC-001',description:'SYNTHETIC WTS Rolex 126610LN USD 12000',from_number:phone,synthetic_fixture:true,revision};
   const text=canonicalize(payload),hash=sha(text),id=crypto.randomUUID();
   const values=[id,scope,'disposable','auctions',payload.id,payload.id,hash,hash,text,JSON.stringify(payload),payload.description,'description'];
   sql('INSERT INTO wf_canonical_staging.mariadb_raw_source_rows(id,source_system,source_database,source_table,source_id,source_record_id,source_hash,raw_sha256,raw_payload_text,raw_payload,raw_message,raw_message_source) VALUES('+values.map(literal).join(',')+');');
@@ -36,6 +38,14 @@ for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'
  assert.equal(doc.source_created_at,null);assert.equal(doc.observed_at,manifest.started_at);
  assert.equal(sql('SELECT extract(year from source_created_on::timestamptz)::int FROM wf_canonical_staging.mariadb_raw_source_rows WHERE id='+literal(selected.id)+';'),'2001');
  assert.equal(doc.source_hash,selected.hash);assert.equal(doc.raw_message_text,'SYNTHETIC WTS Rolex 126610LN USD 12000');assert.equal(doc.price_usd,12000);
+ const dealer=crypto.randomUUID(),resolve='SELECT wf_canonical_staging.resolve_v2_source_dealer('+literal(doc.listing_id)+');';
+ const dealerProof=sql('BEGIN;INSERT INTO public.dealers(id,display_name,status,contact_consent) VALUES('+[dealer,'SYNTHETIC VERSION DEALER','VERIFIED',false].map(literal).join(',')+');'+
+  'INSERT INTO public.dealer_source_identities(dealer_id,source_system,source_identity,identity_type,verification_status) VALUES('+[dealer,scope,phone,'PHONE','VERIFIED'].map(literal).join(',')+');'+
+  'INSERT INTO wf_canonical_staging.mariadb_canary_published_listings_v2 SELECT (jsonb_populate_record(NULL::wf_canonical_staging.mariadb_canary_published_listings_v2,'+literal(JSON.stringify(doc))+')).*;'+resolve+
+  'UPDATE wf_canonical_staging.mariadb_canary_published_listings_v2 SET raw_message_id='+literal(raws[0].id)+' WHERE listing_id='+literal(doc.listing_id)+';'+resolve+
+  "UPDATE wf_canonical_staging.mariadb_canary_published_listings_v2 SET raw_message_id='SYNTHETIC-LEGACY-ID' WHERE listing_id="+literal(doc.listing_id)+';'+resolve+'ROLLBACK;').split('\n').filter(x=>x.startsWith('{')).map(JSON.parse);
+ assert.equal(dealerProof[0].reason,'EXACT_VERIFIED_PHONE');assert.equal(dealerProof[0].dealer_id,dealer);
+ assert.equal(dealerProof[1].reason,'SOURCE_CONTENT_UNVERIFIED');assert.equal(dealerProof[2].reason,'CONFLICTING_SOURCE_VERSIONS');
  // Owner-only tampering is rolled back: unsealed and wrong-scope jobs cannot use the exception.
  sql("INSERT INTO wf_canonical_staging.mariadb_raw_import_checkpoints(run_key,status,input_rows,newly_staged_rows,manifest_sha256,last_created_on,last_source_id) VALUES("+[job,'RAW_STAGED',1,1,digest,'2026-09-07T00:00:00Z','SYNTHETIC-001'].map(literal).join(',')+");");
  for(const update of ["UPDATE wf_canonical_staging.immutable_source_snapshots SET sealed=false WHERE manifest_sha256="+literal(digest),"UPDATE wf_canonical_staging.normalization_jobs_v2 SET source_database='wrong' WHERE job_name="+literal(job),"UPDATE wf_canonical_staging.normalization_jobs_v2 SET immutable_snapshot_sha256=NULL,capture_run_key="+literal(job)+" WHERE job_name="+literal(job)]){
@@ -43,7 +53,7 @@ for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'
  }
  assert.equal(sql('SELECT count(*) FROM wf_canonical_staging.mariadb_raw_source_rows WHERE source_system='+literal(scope)+';'),'2');
  assert.equal(sql("SELECT has_function_privilege('service_role','wf_canonical_staging.materialize_single_member_v2(text,uuid,text,text,text)','execute');"),'f');
- report.databases.push({container,database,status:'PASS',checks:['sealed exact selected version materializes despite retained historical version','exact content and USD amount preserved','reused raw metadata cannot invent a posting date; frozen observation time used','stored original source timestamp unchanged','replay stable','unsealed snapshot rejected','wrong source scope rejected','legacy conflict remains quarantined','both raw versions retained','direct service-role execution denied']});
+ report.databases.push({container,database,status:'PASS',checks:['sealed exact selected version materializes despite retained historical version','exact raw UUID resolves verified dealer despite historical versions','wrong raw UUID/hash and ambiguous legacy dealer links rejected','exact content and USD amount preserved','reused raw metadata cannot invent a posting date; frozen observation time used','stored original source timestamp unchanged','replay stable','unsealed snapshot rejected','wrong source scope rejected','legacy conflict remains quarantined','both raw versions retained','direct service-role execution denied']});
 }
 report.status='PASS';report.finished_at=new Date().toISOString();
 fs.writeFileSync(process.env.DISPOSABLE_REPORT_PATH,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
