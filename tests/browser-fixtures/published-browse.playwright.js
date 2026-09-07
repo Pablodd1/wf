@@ -46,6 +46,11 @@ async page => {
   if (JSON.stringify(options.slice().sort()) !== JSON.stringify(brands.map(item => item.brand).sort())) throw new Error('Population brands incomplete');
   const ids = () => page.locator('article[data-listing-id]').evaluateAll(items => items.map(item => item.dataset.listingId));
   const before = await ids();
+  const visibleCardTexts = await page.locator('article[data-listing-id]').allInnerTexts();
+  for (let index = 0; index < before.length; index++) {
+    const row = rows.find(item => item.listing_id === before[index]);
+    if (row.location_region && !visibleCardTexts[index].includes(row.location_region)) throw new Error('Source region lost from visible card');
+  }
   await page.locator('#sort-filter').selectOption('discovery');
   await page.waitForFunction(id => document.querySelector('article[data-listing-id]')?.dataset.listingId === id, rows[99].listing_id);
   const after = await ids();
@@ -93,7 +98,7 @@ async page => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   if (overflow) throw new Error('Mobile overflow');
   const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
-  return result;
+  return { ...result, source_regions_visible_on_cards: true };
 }
 
 

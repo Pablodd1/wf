@@ -2233,7 +2233,8 @@ function isPricePlausible(price: number | null) {
 }
 
 function getListingMeta(listing: ListingRecord) {
-  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region);
+  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region)
+    || (listing.contract_version === 'v2.0' ? cleanValue(listing.location_region || listing.region) || null : null);
   const postedDate = formatListingDate(listing.listing_date);
   const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency)).toUpperCase();
   const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
