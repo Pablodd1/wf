@@ -1,5 +1,54 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-07 01:35 UTC. The owner authorized the freshly
+verified source snapshot as the release boundary after the explicit boundary
+question. The original August 29 discrepancy remains in the audit: 1,495,803
+expected inputs versus 1,487,333 accounted inputs, an unexplained 8,470. This
+historical remainder is not relabeled as reconciled.
+
+The new source capture completed in one uninterrupted InnoDB repeatable-read,
+consistent-snapshot, read-only transaction: **1,527,898 rows in 306 chunks**.
+An independent pass verified each compressed and canonical chunk digest, every
+row's canonical encoding, strict unique ID ordering, the exact frozen count,
+both endpoint IDs, and the aggregate stream digest. Source DATETIME strings
+remain unchanged in the raw evidence. The private capture contains 3,172,000,009
+canonical bytes, compressed to 683,595,905 bytes.
+
+- Manifest SHA-256: `de3e2387d31e82dc87bad68d0c3128de010e13c86aee58567b0f0ce00803a426`.
+- Canonical stream SHA-256: `08e3d67fc77cc4810ab7a4329c842aafd1bd3072981fc8813155ed2232a4718c`.
+- Full-snapshot private normalization qualification is running; its results are
+  preliminary candidates, not durable production population or publication.
+
+Production's schema-only export was restored into isolated PostgreSQL 18 with
+genuine disposable auth/storage schemas. Its incomplete migration ledger had
+hidden missing dealer-directory prerequisites. Two small forward migrations
+restore four private evidence/link tables and two nullable directory fields;
+they insert no dealers, reviews, consent or listing evidence. All **49** forward
+migrations through dealer activity then passed on the production-schema clone.
+A second clone with **500 synthetic listings and 67 synthetic child records**
+also passed all 49 migrations, preserving the tested source evidence and counts,
+keeping all four dealer tables under RLS, and exposing zero bundles publicly.
+No real source records were seeded into either disposable test database.
+
+A further exact-snapshot membership migration replaces date-based selection for
+fresh snapshots. It verifies the registered manifest digest, then verifies each
+chunk against the canonical bytes of the exact raw versions already ingested.
+Only complete membership can create a normalization job. PostgreSQL **15 and
+18** tests reject altered hashes, duplicate IDs, changed versions, outside rows,
+and incomplete jobs, and prove exact replay and worker membership. Genuine local
+PostgREST returned 200 for all three management RPCs with the service role and
+401 for anonymous calls. These tests do not authorize guessed source facts or
+make private qualification results public.
+
+Production migrations, raw population from the fresh snapshot, approved dealer
+links, final FX/image and research admission, the first 50 real live listings,
+full eligible publication, and final deployment remain pending. Non-watch luxury
+category integration remains required. Bundles/multi-listing posts remain held;
+UI layout and unrelated checkout changes are preserved. No production mutation
+or deployment was performed in this continuation.
+
+Earlier checkpoints below are historical and superseded where stated above.
+
 Latest continuation: 2026-09-07 00:55 UTC. The owner supplied the source endpoint
 and reaffirmed singles first, bundles/multi-listing posts later. The existing
 account matches the requested host, port and user and authenticates with pinned
