@@ -1,5 +1,66 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-07 00:55 UTC. The owner supplied the source endpoint
+and reaffirmed singles first, bundles/multi-listing posts later. The existing
+account matches the requested host, port and user and authenticates with pinned
+TLS. Credentials remain private and are not recorded in this document.
+
+Read-only source discovery measured 1,527,889 current auction rows and zero
+duplicate IDs. Supabase has 1,492,330 raw `auctions` versions but only 1,487,330
+unique IDs: just five IDs outside the authoritative selection, not 5,005 new
+inputs. Other scopes have 19 additional canary IDs; benchmark scopes contribute
+no missing authoritative IDs. These observations do not reconcile the original
+8,470-input difference. Source binary logging is disabled; listing change-log
+access is denied to this account. Exception events contain classification flags,
+not an original-row history. No grants or source rows were changed.
+
+The newly inspected `thecollective.companies` table resolves all **7,744** company
+IDs referenced by the authoritative captured rows. A private field-limited
+snapshot preserves their names, status/verification flags, phone identities and
+seven logo keys, excluding credentials and unrelated account fields. Snapshot
+SHA-256: `e43a985789771dae837902ab5a4235bb98d3bdab1c7cbbaba338045a430f376d`.
+All 1,487,325 authoritative rows were compared in 9,164 company/poster groups:
+
+- 135,968 rows match a consistently verified, active source company's phone,
+  across 365 companies, before shared-phone and per-row content verification.
+- 1,327,491 have an exact phone match but unverified/conflicting source status.
+- 22,416 have no matching source company; 1,045 have a poster/company phone
+  mismatch; 405 reference inactive or restricted companies.
+- 74 source companies have conflicting `is_verified` and `status` fields.
+
+These are reconciliation candidates, not newly approved public dealers. A new
+private reviewer binds company snapshot bytes and field hashes to the exact
+listing source hash. It requires matching source company ID and poster phone,
+holds phones shared between captured companies, and refuses conflicting or
+unknown restrictions. It never turns company stars into reviews, infers contact
+consent, or publishes a record. Its uniqueness check covers the captured company
+snapshot; it is not a claim about every company in the source platform.
+
+A deterministic real sample of 500 authoritative IDs was retained privately.
+499 pass the reviewer; one fails `PROVENANCE_TEXT_MISMATCH`. Local v11
+normalization produced 71 Trading Floor candidates (56 WTB and 15 WTS), 95 held
+bundles and no immediately qualified USD WTS research candidates. Other records
+remain held for missing intent/identity/text; FX and full research admission are
+still required. Sample evidence hash:
+`336f79313308baffc13aa1e658206dde883084e2771d4c6387059eed19e3aa1e`.
+The four company-evidence regression tests and three terminal-checkpoint tests
+pass. The final reviewer was rechecked against the saved real sample without
+another production read. No source/private raw messages were sent to an LLM,
+public preview or customer API. UI and production state remain unchanged.
+
+The pending boundary decision is concrete: retain the original manifest and
+unresolved discrepancy, then establish a new complete source snapshot for the
+release, or recover the original August 29 state from a historical backup.
+The current database credentials do not reconstruct that former state. A new
+boundary would change the master's exact historical-completion requirement and
+must not silently replace it. Other luxury category qualification, dealer
+publication, forward migrations, real canary and final deployment remain
+unfinished. Evidence: task-workspace `outputs/source-access-reconciliation.json`,
+`supabase-source-id-reconciliation.json`, `company-poster-reconciliation.json`,
+`real-dealer-listing-sample.json`, and `company-sample-final-validation.json`.
+
+## Previous continuation — historical recovery discovery
+
 Latest continuation: 2026-09-07 00:17 UTC. The owner confirmed proceeding from
 the observed `a8245646` deployment and expanded scope to real luxury singles.
 The prior deployment-identity hold below is resolved. Production read-only
