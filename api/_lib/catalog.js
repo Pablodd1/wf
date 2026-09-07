@@ -189,7 +189,7 @@ function loadCatalogs() {
   }
 
   try {
-    const enrichedRaw = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'enriched_refs.json'), 'utf8'));
+    const enrichedRaw = JSON.parse(readFileSync(resolve(PUBLIC_DIR, 'catalog-identities.json'), 'utf8'));
     // enriched_refs.json may be an array or an object keyed by reference
     const enriched = Array.isArray(enrichedRaw)
       ? enrichedRaw

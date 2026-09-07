@@ -2,6 +2,7 @@ export interface PriceResearchBatchPair {
   brand: string;
   reference: string;
   dial?: string | null;
+  condition?: string | null;
 }
 
 export interface PriceResearchBatchSummary {
@@ -19,7 +20,7 @@ export interface PriceResearchBatchSummary {
   analytics_ready: boolean;
   stats: { avg: number; median?: number; min: number; max: number } | null;
   representative_image_url: string | null;
-  source_scope: 'CANONICAL_QNSA_RELEASE' | 'BOUNDED_ANALYTICS_SOURCE';
+  source_scope: 'CANONICAL_QNSA_RELEASE' | 'BOUNDED_ANALYTICS_SOURCE' | 'CANONICAL_V2_RELEASE';
   sample_capped: boolean;
 }
 
@@ -41,11 +42,40 @@ function compactDial(value: unknown) {
 }
 
 export function priceResearchBatchKey(pairs: PriceResearchBatchPair[]) {
-  return pairs.map(pair => [
-    pair.brand.trim().toLowerCase(),
-    compactReference(pair.reference),
-    compactDial(pair.dial),
-  ].join('|')).sort().join('\u001e');
+  return pairs.map(priceResearchSummaryKey).sort().join('\u001e');
+}
+
+async function loadExactCanarySummaries(pairs: PriceResearchBatchPair[], signal?: AbortSignal) {
+  // Unknown dial/condition never becomes a cross-dial or cross-condition rating.
+  const eligible = pairs.filter(pair => pair.dial?.trim() && pair.condition?.trim());
+  const summaries: PriceResearchBatchSummary[] = [];
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(3, eligible.length) }, async () => {
+    while (next < eligible.length) {
+      const pair = eligible[next++];
+      const params = new URLSearchParams({ brand: pair.brand, reference: pair.reference,
+        dial: pair.dial!, condition: pair.condition!, pageSize: '1' });
+      const response = await fetch(`/api/canary/price-research?${params}`, { signal });
+      if (!response.ok) throw new Error('Exact market cohort unavailable');
+      const payload = await response.json();
+      if (!payload.success || !payload.selected_cohort) throw new Error('Invalid exact market cohort');
+      const cohort = payload.selected_cohort;
+      if (priceResearchSummaryKey({ brand: cohort.brand || '', reference: cohort.reference || '',
+        dial: cohort.dial_color, condition: cohort.condition }) !== priceResearchSummaryKey(pair)) {
+        throw new Error('Mismatched exact market cohort');
+      }
+      const count = Number(payload.count);
+      const ready = payload.analytics_ready === true && Number.isSafeInteger(count) && count >= 2 && payload.stats;
+      summaries.push({ key: priceResearchSummaryKey(pair), brand: pair.brand, reference: pair.reference,
+        source_observation_count: payload.totalListings, wts_observation_count: payload.wts_count,
+        wtb_observation_count: payload.wtb_count, reference_qualified_wts_count: 0,
+        reference_analytics_ready: false, reference_stats: null, selected_dial: pair.dial!,
+        selected_dial_qualified_count: ready ? count : 0, analytics_ready: Boolean(ready),
+        stats: ready ? payload.stats : null, representative_image_url: null,
+        source_scope: 'CANONICAL_V2_RELEASE', sample_capped: false });
+    }
+  }));
+  return summaries;
 }
 
 export function loadPriceResearchBatchSummaries(pairs: PriceResearchBatchPair[], signal?: AbortSignal) {
@@ -59,7 +89,8 @@ export function loadPriceResearchBatchSummaries(pairs: PriceResearchBatchPair[],
   if (cached && now - cached.createdAt < CLIENT_TTL_MS) return cached.value;
   if (cached) cache.delete(key);
 
-  const value = fetch('/api/price-research-batch-summary', {
+  const useExactCanary = normalized.some(pair => Object.prototype.hasOwnProperty.call(pair, 'condition'));
+  const request = useExactCanary ? loadExactCanarySummaries(normalized, signal) : fetch('/api/price-research-batch-summary', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pairs: normalized }),
@@ -70,7 +101,8 @@ export function loadPriceResearchBatchSummaries(pairs: PriceResearchBatchPair[],
     if (!payload.success || !Array.isArray(payload.summaries)) throw new Error('Invalid batch market summary response');
     const requested = new Set(normalized.map(priceResearchSummaryKey));
     return payload.summaries.filter(summary => requested.has(summary.key));
-  }).catch(error => {
+  });
+  const value = request.catch(error => {
     cache.delete(key);
     throw error;
   });
@@ -80,11 +112,16 @@ export function loadPriceResearchBatchSummaries(pairs: PriceResearchBatchPair[],
 }
 
 export function priceResearchSummaryKey(pair: PriceResearchBatchPair) {
-  return [
+  if (Object.prototype.hasOwnProperty.call(pair, 'condition')) {
+    return 'v2:' + JSON.stringify([pair.brand.trim().toLowerCase(), pair.reference.trim().toUpperCase(),
+      String(pair.dial || '').trim().toUpperCase(), String(pair.condition || '').trim().toUpperCase()]);
+  }
+  const parts = [
     pair.brand.trim().toLowerCase(),
     compactReference(pair.reference),
     compactDial(pair.dial),
-  ].join('|');
+  ];
+  return parts.join('|');
 }
 
 export const priceResearchBatchCachePolicy = {

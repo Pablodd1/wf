@@ -7,8 +7,8 @@ const crypto = require('node:crypto');
 const { normalizeAuthoritativeRow, sha256 } = require('./authoritative-evidence-normalizer.cjs');
 
 const FROZEN_UPPER_CURSOR = {
-  created_on: '2026-04-28T15:50:43.000Z',
-  source_id: '3cddaf9f-9f36-4633-a08e-59a6dfdca057'
+  created_on: '2026-08-29T14:42:32.000Z',
+  source_id: 'f1bdf67a-3723-41c6-a1e3-35c5ca9138b0'
 };
 
 const TARGET_ROW_COUNT = 10000;
@@ -73,7 +73,7 @@ async function runAuthoritativeCanary(env = process.env) {
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  console.log('[Authoritative-10k-Canary] Fetching exactly ' + TARGET_ROW_COUNT.toLocaleString() + ' rows from MariaDB private raw staging...');
+  console.log('[Authoritative-10k-Canary] Fetching exactly ' + TARGET_ROW_COUNT.toLocaleString() + ' rows from MariaDB authoritative raw cohort...');
 
   const stagedRows = [];
   const seenIds = new Set();
@@ -81,28 +81,24 @@ async function runAuthoritativeCanary(env = process.env) {
   let lastSourceId = null;
 
   while (stagedRows.length < TARGET_ROW_COUNT) {
-    const limit = 1000;
-    const body = {
-      p_limit: limit,
-      p_last_created_on: lastCreatedOn,
-      p_last_source_id: lastSourceId
-    };
+    const limit = Math.min(1000, TARGET_ROW_COUNT - stagedRows.length);
+    let url = supabaseUrl.replace(/\/$/, '') + '/rest/v1/mariadb_authoritative_raw_source_rows?select=*&order=source_created_on.asc,source_id.asc&limit=' + limit;
+    if (lastCreatedOn && lastSourceId) {
+      url += '&or=(source_created_on.gt.' + encodeURIComponent(lastCreatedOn) + ',and(source_created_on.eq.' + encodeURIComponent(lastCreatedOn) + ',source_id.gt.' + encodeURIComponent(lastSourceId) + '))';
+    }
 
-    const url = supabaseUrl.replace(/\/$/, '') + '/rest/v1/rpc/get_mariadb_private_staged_rows_batch';
     const res = await fetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         apikey: supabaseKey,
         Authorization: 'Bearer ' + supabaseKey
-      },
-      body: JSON.stringify(body)
+      }
     });
 
-    if (!res.ok) throw new Error('RPC failed (' + res.status + '): ' + (await res.text()));
+    if (!res.ok) throw new Error('Fetch failed (' + res.status + '): ' + (await res.text()));
     const batch = await res.json();
     if (!batch || !batch.length) {
-      console.log('[Authoritative-10k-Canary] No more rows returned by RPC.');
+      console.log('[Authoritative-10k-Canary] No more rows returned.');
       break;
     }
 

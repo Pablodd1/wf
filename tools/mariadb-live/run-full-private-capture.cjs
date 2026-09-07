@@ -15,6 +15,7 @@ const {
   sha256,
   stableJson,
   computeManifestHash,
+  assertCaptureCheckpointReconciled,
   canonicalizeRawPayload,
   parseMaxCaptureRows,
   checkPinnedServerIdentity,
@@ -182,6 +183,7 @@ async function runCaptureLoop(options = {}) {
 
   console.log(`2. Reading checkpoint state for runKey '${runKey}' via RPC (fail-closed)...`);
   const existingCheckpoint = await fetchCheckpointState(supabase, runKey);
+  assertCaptureCheckpointReconciled(existingCheckpoint);
 
   // 3. Connect to MariaDB with Pinned Certificate Transport
   console.log('3. Connecting to MariaDB with pinned TLS and establishing consistent snapshot...');
@@ -321,12 +323,18 @@ async function runCaptureLoop(options = {}) {
     let readbackResult = { verified: true, total_verified: 0, mismatches_count: 0 };
 
     if (sourceIdsToVerify.length > 0) {
-      const { data: readbackRows, error: readbackErr } = await supabase.rpc('verify_mariadb_private_raw_readback', {
-        p_source_ids: sourceIdsToVerify
-      });
-      if (readbackErr) throw new Error('Hash readback RPC failed: ' + readbackErr.message);
+      const CHUNK_SIZE = 500;
+      let allReadbackRows = [];
+      for (let i = 0; i < sourceIdsToVerify.length; i += CHUNK_SIZE) {
+        const chunk = sourceIdsToVerify.slice(i, i + CHUNK_SIZE);
+        const { data: readbackRows, error: readbackErr } = await supabase.rpc('verify_mariadb_private_raw_readback', {
+          p_source_ids: chunk
+        });
+        if (readbackErr) throw new Error('Hash readback RPC failed: ' + readbackErr.message);
+        allReadbackRows = allReadbackRows.concat(readbackRows || []);
+      }
 
-      readbackResult = verifyHashReadbackContract(readbackRows, sampleVerificationRecords);
+      readbackResult = verifyHashReadbackContract(allReadbackRows, sampleVerificationRecords);
       console.log(`Hash Readback Result: ${readbackResult.total_verified} records verified (0 mismatches). Mode: ${isFullVerification ? 'FULL_EXHAUSTIVE' : 'SAMPLED'}`);
     }
 
@@ -340,7 +348,7 @@ async function runCaptureLoop(options = {}) {
     const errorLedgerResult = verifyErrorLedgerContract(errorLedgerRows || [], cumulativeErrors);
     console.log(`Error Ledger Verified: ${errorLedgerRows?.length || 0} recorded errors match cumulative error count.`);
 
-    // 7. Checkpoint Finalization with Strict Total, Boundary, and Zero-Row Verification
+    // 7. Checkpoint Finalization with Strict Boundary and Zero-Row Verification
     let finalStatus = 'COPYING_RAW';
     let finalizeData = null;
 

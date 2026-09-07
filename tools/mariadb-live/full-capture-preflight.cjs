@@ -36,6 +36,44 @@ function computeManifestHash(manifest) {
   return sha256(stableJson(copy));
 }
 
+// A terminal cursor with a short count cannot be repaired by fetching after it.
+// Reject it before opening the source or making any checkpoint/staging writes.
+function assertCaptureCheckpointReconciled(checkpoint) {
+  if (!checkpoint) return;
+  const manifest = checkpoint.frozen_manifest;
+  if (!manifest || computeManifestHash(manifest) !== checkpoint.manifest_sha256) {
+    throw new Error('CAPTURE_CHECKPOINT_MANIFEST_INVALID');
+  }
+  const fields = ['input_rows', 'newly_staged_rows', 'already_staged_identical_rows', 'capture_error_rows'];
+  const counts = fields.map(field => Number(checkpoint[field]));
+  const expected = Number(manifest.total_source_rows);
+  if (fields.some(field => !['number', 'string'].includes(typeof checkpoint[field]) || !/^\d+$/.test(String(checkpoint[field]))) ||
+      counts.some(count => !Number.isSafeInteger(count) || count < 0) ||
+      !Number.isSafeInteger(expected) || expected < 1 || counts[0] > expected ||
+      counts[0] !== counts[1] + counts[2] + counts[3]) {
+    throw new Error('CAPTURE_CHECKPOINT_COUNTS_UNRECONCILED');
+  }
+  const upper = manifest.upper_boundary;
+  const normalizeDate = value => {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|\+00:00)$/.test(value)) return null;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  };
+  const lastDate = normalizeDate(checkpoint.last_created_on);
+  const upperDate = normalizeDate(upper?.created_on);
+  if (!upper?.id || !upperDate || (counts[0] > 0 && (!lastDate || !checkpoint.last_source_id))) {
+    throw new Error('CAPTURE_CHECKPOINT_CURSOR_INVALID');
+  }
+  if (lastDate && lastDate > upperDate) throw new Error('CAPTURE_CHECKPOINT_CURSOR_BEYOND_BOUNDARY');
+  const atUpper = lastDate === upperDate && checkpoint.last_source_id === upper.id;
+  if (atUpper && counts[0] !== expected) {
+    throw new Error(`CAPTURE_TERMINAL_CURSOR_SHORTFALL: missing ${expected - counts[0]} frozen inputs; historical source recovery required`);
+  }
+  if ((counts[0] === expected || checkpoint.status === 'RAW_STAGED') && (!atUpper || counts[0] !== expected)) {
+    throw new Error('CAPTURE_CHECKPOINT_FINALIZATION_INVALID');
+  }
+}
+
 
 function checkPinnedServerIdentity(servername, cert) {
   if (!cert) {
@@ -303,6 +341,7 @@ function parseMaxCaptureRows(raw) {
 }
 
 module.exports = {
+  assertCaptureCheckpointReconciled,
   parseMaxCaptureRows,
   computeManifestHash,
   CONTRACT,

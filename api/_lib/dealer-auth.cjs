@@ -7,7 +7,7 @@ const REFRESH_COOKIE = 'wf_dealer_refresh';
 const DEALER_ROLES = new Set(['dealer', 'reviewer', 'admin']);
 
 function authClient() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://qnsafosakvonzgfcsphh.supabase.co';
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false } });
@@ -16,7 +16,9 @@ function authClient() {
 function parseCookies(header = '') {
   return Object.fromEntries(header.split(';').map(part => part.trim()).filter(Boolean).map(part => {
     const separator = part.indexOf('=');
-    return [part.slice(0, separator), decodeURIComponent(part.slice(separator + 1))];
+    if (separator < 1) return ['', ''];
+    try { return [part.slice(0, separator), decodeURIComponent(part.slice(separator + 1))]; }
+    catch { return [part.slice(0, separator), '']; }
   }));
 }
 
@@ -48,13 +50,14 @@ async function resolveSession(client, req, res) {
   const accessToken = cookies[ACCESS_COOKIE];
   if (accessToken) {
     const { data, error } = await client.auth.getUser(accessToken);
-    if (!error && data.user) return data.user;
+    if (!error && data.user) { req.dealerAccessToken = accessToken; return data.user; }
   }
   const refreshToken = cookies[REFRESH_COOKIE];
   if (!refreshToken) return null;
   const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
   if (error || !data.session || !data.user) return null;
   setSessionCookies(res, data.session);
+  req.dealerAccessToken = data.session.access_token;
   return data.user;
 }
 

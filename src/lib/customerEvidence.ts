@@ -23,3 +23,9 @@ export function strongestPostingIdentity(record: object) {
 }
 
 export const ambiguousPriceDisplay = contract.customer_publication.ambiguous_price_display;
+
+export function listingAvailabilityLabel(record: { cohort_status?: string | null; current_status?: string | null }) {
+  return record.cohort_status === 'CONFIRMED_CURRENT' && record.current_status === 'CURRENT_ACTIVE'
+    ? 'CONFIRMED CURRENT'
+    : 'OBSERVED · CHECK AVAILABILITY';
+}

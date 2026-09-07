@@ -85,9 +85,10 @@ test('dealer profile distinguishes aggregate-only group counts from published gr
   assert.deepEqual(detailed.groups, [{ name: 'Published group' }]);
 });
 
-test('dealer profile separates public-source profiles from verified database dealers', () => {
+test('dealer profile requires approved database evidence and never promotes static source profiles', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-profile.js'), 'utf8');
-  assert.match(source, /sourceProfilePayload/);
+  assert.doesNotMatch(source, /sourceProfilePayload/);
+  assert.match(source, /get_approved_dealer_profile_v2/);
   assert.match(source, /dealer\.status !== 'VERIFIED'/);
   assert.match(source, /listing_identity_reviews/);
   assert.match(source, /seller_listing_lineage_staging/);
