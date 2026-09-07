@@ -61,8 +61,7 @@ class CdpBrowserSession {
       '--remote-debugging-port=0',
       '--user-data-dir=' + this.tmpUserDir,
       '--disable-gpu',
-      '--no-first-run',
-      '--no-sandbox'
+      '--no-first-run'
     ], { windowsHide: true });
 
     const portFile = path.join(this.tmpUserDir, 'DevToolsActivePort');

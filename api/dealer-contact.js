@@ -14,7 +14,7 @@ module.exports=async function handler(req,res){
   if(error)throw error;
   if(!profile?.dealer)return res.status(404).json({error:'Verified dealer profile not found'});
   const contact=profile.stats?.verified_contact_info;
-  const available=profile.dealer.source_system==='WATCHFACTS_VERIFIED_DEALERS'
+  const available=['WATCHFACTS_VERIFIED_DEALERS','WATCHFACTS_SOURCE_POSTERS'].includes(profile.dealer.source_system)
    &&profile.listing_linkage_status==='EXACT_PUBLISHED_SOURCE_LINKAGE'&&Number(profile.listing_total)>0
    &&contact?.verification_status==='VERIFIED'&&/^\+?[1-9]\d{7,14}$/.test(contact.phone||'');
   if(!available)return res.status(channel?403:200).json({success:true,contact_available:false});

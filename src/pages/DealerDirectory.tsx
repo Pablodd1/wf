@@ -139,7 +139,7 @@ export default function DealerDirectory() {
                   <div className="grid h-12 w-12 place-items-center border border-[#c9a96e]/35 bg-[#08080c] text-[#c9a96e]">
                     {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : <Building2 size={21} />}
                   </div>
-                  {<BadgeCheck size={19} className="text-[#c9a96e]" aria-label={canonicalVerified ? 'Verified dealer' : 'Source dealer candidate'} />}
+                  {canonicalVerified ? <BadgeCheck size={19} className="text-[#c9a96e]" aria-label="Verified dealer" /> : <Users size={19} className="text-[#c9a96e]" aria-label="Source poster; dealer verification unavailable" />}
                 </div>
                 <h2 className="mt-7 pr-12 text-xl font-semibold">
                   <Link to={`/reference-check/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>

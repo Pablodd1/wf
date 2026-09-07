@@ -2083,7 +2083,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
               {contact?.contact_available
-                ? 'Contact the verified dealer to confirm this listing and its availability.'
+                ? 'Contact the original poster to confirm this listing and its availability.'
                 : 'A verified, consented contact channel is not available for this listing.'}
             </p>
 

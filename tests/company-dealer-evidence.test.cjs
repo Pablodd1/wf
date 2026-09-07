@@ -37,3 +37,13 @@ test('tampered source bytes, duplicate companies and wrong evidence scope fail c
   assert.throws(() => reviewer()(row), /PROVENANCE_CONTENT_MISMATCH/);
   assert.throws(() => reviewer()({ ...listing(), source_table: 'auctions_bench' }), /SOURCE_UNSUPPORTED/);
 });
+
+test('owner-reviewed source posters remain distinct from verified dealers and retain identity safety checks',()=>{
+ const make=companies=>{const bytes=Buffer.from(stableJson({contract:'WF_SOURCE_COMPANY_IDENTITY_FIELD_SNAPSHOT_V1',source_database:'thecollective',source_table:'companies',observed_at:'2026-09-07T00:00:00Z',companies}));return prepareCompanyDealerEvidence(bytes,sha256(bytes),{includeSourcePosters:true});};
+ const unverified={...company,is_verified:0,status:'unverified'};
+ const r=make([unverified])(listing());assert.equal(r.outcome,'EXACT_SOURCE_POSTER_CANDIDATE');assert.equal(r.contact_publication_approved,false);assert.equal(r.seller_rating,null);
+ assert.equal(make([unverified,{...unverified,id:2}])(listing()).outcome,'PHONE_SHARED_BETWEEN_COMPANIES');
+ assert.equal(make([{...unverified,is_banned:1}])(listing()).outcome,'SOURCE_COMPANY_INACTIVE_OR_RESTRICTED');
+ assert.equal(make([unverified])(listing({from_number:'12025550102'})).outcome,'COMPANY_POSTER_PHONE_MISMATCH');
+ assert.equal(make([company])(listing()).outcome,'VERIFIED_SOURCE_IDENTITY_CANDIDATE');
+});

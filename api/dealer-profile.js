@@ -62,7 +62,7 @@ function sanitizeDealerProfile(profile) {
   const groups = Array.isArray(profile?.groups) ? profile.groups : [];
   const groupCount = Number(profile?.stats?.group_count ?? profile?.dealer?.whatsapp_group_count ?? 0);
   const contact = profile?.stats?.verified_contact_info;
-  const contactAvailable = profile?.dealer?.source_system === 'WATCHFACTS_VERIFIED_DEALERS'
+  const contactAvailable = ['WATCHFACTS_VERIFIED_DEALERS','WATCHFACTS_SOURCE_POSTERS'].includes(profile?.dealer?.source_system)
     && profile?.listing_linkage_status === 'EXACT_PUBLISHED_SOURCE_LINKAGE'
     && Number(profile?.listing_total) > 0
     && contact?.verification_status === 'VERIFIED'

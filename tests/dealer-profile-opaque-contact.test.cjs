@@ -30,3 +30,9 @@ test('shared contact budget and service failures fail closed without exposing pr
 test('unsupported identities and channels do not reach the contact store',async()=>{
  client={rpc:async()=>assert.fail('invalid requests must not query contacts')};for(const query of [{id:[id]},{id:'https://example.invalid'},{id,channel:'telegram'}])assert.equal((await invoke(contactHandler,query)).statusCode,400);
 });
+
+test('source-linked poster contact does not require or invent dealer verification',async()=>{
+ const p=fixture();p.dealer.source_system='WATCHFACTS_SOURCE_POSTERS';client={rpc:async name=>({data:name==='consume_listing_contact_budget'?true:p,error:null})};
+ const profile=await invoke(profileHandler,{id});assert.equal(profile.body.dealer.source_system,'WATCHFACTS_SOURCE_POSTERS');assert.equal(profile.body.dealer.rating,null);assert.equal(profile.body.stats.verified_contact_info,null);assert.ok(profile.body.stats.contact_action);
+ const contact=await invoke(contactHandler,{id,channel:'whatsapp'});assert.equal(contact.statusCode,302);
+});
