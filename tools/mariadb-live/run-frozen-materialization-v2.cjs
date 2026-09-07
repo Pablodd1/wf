@@ -3,9 +3,9 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const {createRpc}=require('./run-frozen-normalization-v2.cjs');
-const {captureSourceImageEvidence}=require('./source-image-evidence-v2.cjs');
+const {captureSourceImageWithRetry}=require('./source-image-retry.cjs');
 
-async function run({rpc,jobName,batchSize=20,maxBatches=Infinity,onProgress=()=>{},captureImage=captureSourceImageEvidence,disposableBase,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}) {
+async function run({rpc,jobName,batchSize=20,maxBatches=Infinity,onProgress=()=>{},captureImage=captureSourceImageWithRetry,disposableBase,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}) {
  if(!jobName||!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>500) throw new Error('INVALID_MATERIALIZATION_WORKER_CONFIG');
  for(let batch=0;batch<maxBatches;batch++) {
   const next=await rpc('read_materialization_workflow_batch_v2',{p_job_name:jobName,p_limit:batchSize});
@@ -32,6 +32,9 @@ async function run({rpc,jobName,batchSize=20,maxBatches=Infinity,onProgress=()=>
        captured={outcome:'SOURCE_PROVENANCE_REQUIRES_REVIEW',proof:null};
       }
       outcome=captured.outcome;
+      for(const prior of captured.priorProofs||[]){
+       await rpc('stage_source_image_evidence_v2',{p_document:prior.document,p_canonical_json:prior.canonical_json,p_evidence_hash:prior.evidence_hash});
+      }
       if(captured.proof){
        const proof=captured.proof;
        await rpc('stage_source_image_evidence_v2',{p_document:proof.document,p_canonical_json:proof.canonical_json,p_evidence_hash:proof.evidence_hash});
