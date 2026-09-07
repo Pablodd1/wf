@@ -4,8 +4,12 @@
 // Existing cards use these field names. Aliases must describe the canonical
 // record, never legacy fallbacks or the unvalidated input payload.
 function withExistingCardFields(canonical) {
+  const categories = { watch: 'WATCH', watches: 'WATCH', wristwatches: 'WATCH',
+    handbag: 'HANDBAG', handbags: 'HANDBAG', jewelry: 'JEWELRY', jewellery: 'JEWELRY',
+    accessory: 'ACCESSORY', accessories: 'ACCESSORY', other: 'OTHER' };
   return {
     ...canonical,
+    item_category: Object.hasOwn(categories, canonical.category) ? categories[canonical.category] : null,
     raw_message: canonical.raw_message_text,
     raw_message_scope: canonical.raw_message_text === null ? 'unavailable' : 'stored_source_message',
     raw_message_evidence_type: canonical.raw_message_text === null ? null : 'SOURCE_RAW_MESSAGE',

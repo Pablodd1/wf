@@ -345,6 +345,10 @@ test("Phase 1 & 2: API Contract and Parameter Validation Test Suite", async (t) 
     assert.equal(rec.listing_display_contract_version, "v2.0");
     assert.equal(rec.raw_message, fixtureRow.raw_message_text);
     assert.equal(rec.raw_message_scope, 'stored_source_message');
+    assert.equal(rec.item_category, null); // Unknown category must stay unknown.
+    const { withExistingCardFields } = require('../api/_lib/canary-card-fields.cjs');
+    assert.equal(withExistingCardFields({ ...rec, category: 'handbag' }).item_category, 'HANDBAG');
+    assert.equal(withExistingCardFields({ ...rec, category: 'watch' }).item_category, 'WATCH');
     assert.equal(rec.raw_message_truncated, false);
     assert.equal(rec.source_price_amount, 32000);
     assert.equal(rec.source_currency, 'USD');
