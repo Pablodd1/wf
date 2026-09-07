@@ -6,7 +6,7 @@ const {createRpc}=require('./run-frozen-normalization-v2.cjs');
 const {captureSourceImageEvidence}=require('./source-image-evidence-v2.cjs');
 
 async function run({rpc,jobName,batchSize=20,maxBatches=Infinity,onProgress=()=>{},captureImage=captureSourceImageEvidence,disposableBase}) {
- if(!jobName||!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>25) throw new Error('INVALID_MATERIALIZATION_WORKER_CONFIG');
+ if(!jobName||!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>500) throw new Error('INVALID_MATERIALIZATION_WORKER_CONFIG');
  for(let batch=0;batch<maxBatches;batch++) {
   const next=await rpc('read_materialization_workflow_batch_v2',{p_job_name:jobName,p_limit:batchSize});
   if(!next||!Array.isArray(next.members)||!next.job) throw new Error('INVALID_MATERIALIZATION_BATCH_RESPONSE');
