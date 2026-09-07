@@ -4,7 +4,8 @@ const {execFileSync}=require('node:child_process');
 const {Client}=require('./test-dependencies.cjs')('pg');
 const {assertDiscoveryOrder}=require('../../api/_lib/canary-discovery.cjs');
 async function main(){
- const report={status:'RUNNING',started_at:new Date().toISOString(),synthetic_only:true,production_contacted:false,databases:[]};
+ const migrationSource=fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20260909200000_snapshot_browse_discovery.sql'),'utf8').replaceAll('\r\n','\n');
+ const report={status:'RUNNING',started_at:new Date().toISOString(),synthetic_only:true,production_contacted:false,migration_sha256_lf:require('node:crypto').createHash('sha256').update(migrationSource).digest('hex'),databases:[]};
  for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'],['wf-final-disposable-pg18','wf_production_forward_20260907']]){
   const info=JSON.parse(execFileSync('docker',['inspect',container],{encoding:'utf8'}))[0];
   const env=Object.fromEntries(info.Config.Env.map(v=>[v.slice(0,v.indexOf('=')),v.slice(v.indexOf('=')+1)]));
