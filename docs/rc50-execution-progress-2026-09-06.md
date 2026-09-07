@@ -1,5 +1,49 @@
 # WatchFacts finalization execution checkpoint
 
+Latest result: 2026-09-07 01:53 UTC. Full private v11 qualification completed:
+
+| Durable local qualification outcome | Inputs |
+| --- | ---: |
+| Trading Floor WTS candidate | 11,580 |
+| Trading Floor WTB candidate | 92,580 |
+| Bundle/multi-offer held | 499,850 |
+| Missing/ambiguous intent review | 560,882 |
+| Identity/category review | 362,116 |
+| Missing source text review | 890 |
+| **Total verified snapshot inputs** | **1,527,898** |
+
+This is an exact local qualification reconciliation, not final Supabase outcome
+population or publication. It found 493 explicit-USD WTS research candidates
+before cohort admission, 2,468 requiring FX resolution, and 7,125 ambiguous
+currency cases. Non-watch categories remain in review until their separate
+category contract is integrated; no watch identity is invented for them.
+
+The first **50 real priced WTS single-item candidates** with consistent source
+company/poster evidence were selected privately from the verified snapshot.
+Their explicit currencies are USD, EUR, HKD and GBP; the stored ECB evidence
+supports conversion. All **50 source image URLs** passed HEAD, bounded GET,
+content-type and image-signature checks. These pre-ingestion probes retain source
+ID/hash lineage but must be rebound to actual persisted raw-row IDs. The canary
+has not been published. Selection SHA-256:
+`e43af47459ba66656f3bb0f0dbb66f88301a422661296888224fdd583d2de816`.
+Image-probe evidence SHA-256:
+`61c2b84ba770340a1c98127ab1e1e4d82952b17f3851cf065c8714db0ab6c0b5`.
+
+The new chunk ingestion library copies at most 250 raw rows per transaction,
+reuses exact existing source/hash versions, and binds each completed chunk to its
+registered canonical digest. Genuine disposable PostgreSQL tests prove that
+altered chunk bytes are rejected, source whitespace and null-byte evidence are
+preserved, retries create no duplicate versions, unknown timestamps remain null,
+and the bound chunk creates the exact normalization job.
+
+Read-only production capacity discovery reports 80,967,650,451 database bytes.
+The dashboard shows 76.70 GB used of 90 GB (87%) and configured growth to 135 GB
+at 90%. The full import is expected to trigger this growth. Owner approval was
+requested for at most 45 GB additional disk, approximately $5.63/month at the
+published GP3 rate, with the current compute tier. No paid settings changed.
+The disk approval is pending; independent code validation continues. Source and
+production mutations remain zero for this continuation.
+
 Latest continuation: 2026-09-07 01:35 UTC. The owner authorized the freshly
 verified source snapshot as the release boundary after the explicit boundary
 question. The original August 29 discrepancy remains in the audit: 1,495,803
