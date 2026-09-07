@@ -1,7 +1,8 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict'),{execFileSync}=require('node:child_process');
 const {Client}=require('./test-dependencies.cjs')('pg');const {stableJson,sha256}=require('../mariadb-live/lossless-payload-sanitizer.cjs');
-const {run:normalize}=require('../mariadb-live/run-frozen-normalization-v2.cjs');
+const {run:normalize,normalizeClaim}=require('../mariadb-live/run-frozen-normalization-v2.cjs');
+const {claimReviewedCanaryMembers}=require('../mariadb-live/claim-reviewed-canary-members.cjs');
 const {run:materialize}=require('../mariadb-live/run-frozen-materialization-v2.cjs');
 const {createNormalizationPostgresRpc}=require('../mariadb-live/normalization-postgres-rpc.cjs');
 async function main(){const report={status:'RUNNING',started_at:new Date().toISOString(),synthetic_only:true,production_contacted:false,databases:[]};
@@ -26,6 +27,12 @@ for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'
  const legacy=scope+'-LEGACY';await db.query(`INSERT INTO wf_canonical_staging.mariadb_raw_import_checkpoints(run_key,last_created_on,last_source_id,input_rows,newly_staged_rows,status,frozen_upper_boundary,manifest_sha256,updated_at) VALUES($1,'2026-09-03','zzzz',3,3,'RAW_STAGED','{"created_on":"2026-09-03","source_id":"zzzz","count":3}',$2,now())`,[legacy,sha256(legacy)]);
  await db.query('SELECT public.create_frozen_normalization_job_v2($1,$1,$2,$3,$4,$5,3)',[legacy,sha256(legacy),scope,'disposable','auctions']);
  await reject('SELECT public.create_materialization_workflow_v2($1,$2,NULL)',[legacy+'-MAT',legacy],/normalization_boundary_not_complete/);
+ // A canary may have completed a later UUID before the prefix reaches it.
+ await db.query('SAVEPOINT unfinished_hole');const ordered=[...ids].sort();
+ const selected=await claimReviewedCanaryMembers(db,{jobName:scope,manifestSha256:digest,rawRowIds:[ordered[0],ordered[2]]});
+ await db.query('SELECT public.complete_normalization_batch_v2($1,$2,$3)',[scope,selected.leaseId,JSON.stringify(selected.members.map(normalizeClaim))]);
+ const prefix=await rpc('read_materialization_workflow_batch_v2',{p_job_name:workflow,p_limit:3});assert.deepEqual(prefix.members.map(m=>m.raw_row_id),[ordered[0]]);
+ await db.query('ROLLBACK TO SAVEPOINT unfinished_hole');
  let waits=0;const checkpoints=[];
  const final=await materialize({rpc,jobName:workflow,batchSize:3,maxBatches:6,wait:async()=>{waits++;await normalize({rpc:norm,jobName:scope,batchSize:waits===1?2:1,maxBatches:1});},onProgress:j=>checkpoints.push({processed:j.processed_rows,complete:j.complete,waiting:!!j.waiting_for_normalization})});
  assert.equal(waits,2);assert.equal(final.processed_rows,3);assert.equal(final.eligible_rows,3);assert.equal(final.complete,true);assert.ok(checkpoints.some(j=>j.processed===2&&!j.complete));
