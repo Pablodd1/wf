@@ -8,7 +8,10 @@ for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'
  const before=sql('SELECT count(*) FROM wf_canonical_staging.mariadb_canary_published_listings_v2;'),batch='SYNTHETIC-VERSION-PUBLISH-'+crypto.randomUUID();
  const migration=fs.readFileSync(path.join(repo,'supabase/migrations/20260909090000_snapshot_bound_publication.sql'),'utf8').replace(/COMMIT;\s*$/,'');
  const publish="public.publish_materialized_batch_v2("+lit(batch)+",(SELECT revision FROM wf_canonical_staging.publication_revision WHERE singleton),ARRAY["+lit(m.hash)+"],true)";
- let script=migration+'CREATE SCHEMA IF NOT EXISTS wf_disposable_legacy;';
+ const optional=fs.readFileSync(path.join(repo,'supabase/migrations/20260909110000_publication_optional_fixture_metadata.sql'),'utf8').replace(/^.*?BEGIN;/s,'').replace(/COMMIT;\s*$/,'');
+ let script=migration+optional+'CREATE SCHEMA IF NOT EXISTS wf_disposable_legacy;';
+ script+='ALTER TABLE wf_canonical_staging.mariadb_raw_source_rows RENAME COLUMN test_run_id TO disposable_tag_omitted_in_production;';
+ script+='DO $test$ BEGIN BEGIN PERFORM '+publish.replace(',true)',',false)')+"; RAISE EXCEPTION 'synthetic_production_refusal_missing'; EXCEPTION WHEN SQLSTATE '22023' THEN IF SQLERRM<>'production_synthetic_evidence_refused' THEN RAISE; END IF; END; END $test$;";
  for(const change of ["UPDATE wf_canonical_staging.immutable_source_snapshots SET sealed=false WHERE manifest_sha256=(SELECT immutable_snapshot_sha256 FROM wf_canonical_staging.normalization_jobs_v2 WHERE job_name="+lit(m.job)+')',"UPDATE wf_canonical_staging.normalization_jobs_v2 SET source_database='wrong' WHERE job_name="+lit(m.job)]){
   script+='SAVEPOINT rejection;'+change+';DO $test$ BEGIN BEGIN PERFORM '+publish+"; RAISE EXCEPTION 'expected_publication_refusal_missing'; EXCEPTION WHEN SQLSTATE '22023' THEN IF SQLERRM<>'publication_source_versions_conflict' THEN RAISE; END IF; END; END $test$;ROLLBACK TO rejection;";
  }
@@ -18,6 +21,6 @@ for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'
  const result=sql(script).split('\n').filter(s=>s.startsWith('{')).map(JSON.parse);
  assert.equal(result[0].inserted,1);assert.equal(result[0].held,0);assert.equal(result[1].published_selected,1);assert.equal(result[2].state,'ROLLED_BACK');
  assert.equal(sql('SELECT count(*) FROM wf_canonical_staging.mariadb_canary_published_listings_v2;'),before);
- report.databases.push({container,database,status:'PASS',checks:['Exact selected sealed-snapshot member publishes despite retained historical version','Unsealed snapshot or changed source scope rejected before publication','Actual owner publication and rollback execute','Existing public data and both immutable snapshot surfaces restored by rollback']});
+ report.databases.push({container,database,status:'PASS',checks:['Exact selected sealed-snapshot member publishes despite retained historical version','Unsealed snapshot or changed source scope rejected before publication','Production schema without disposable tag column executes correctly','Synthetic payload remains rejected in production mode without optional tag column','Actual owner publication and rollback execute','Existing public data and both immutable snapshot surfaces restored by rollback']});
 }
 report.status='PASS';report.finished_at=new Date().toISOString();fs.writeFileSync(process.env.DISPOSABLE_REPORT_PATH,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
