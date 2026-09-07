@@ -4,10 +4,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  normalizeAuthoritativeRow,
+  normalizeAuthoritativeRow: productionNormalize,
   resolveSourceTextEvidence,
   resolveStrictIntentFromText
 } = require('../tools/mariadb-live/authoritative-evidence-normalizer.cjs');
+const { capturedFixture } = require('./helpers/captured-fixture.cjs');
+const normalizeAuthoritativeRow = (row, options) => productionNormalize(capturedFixture(row), options);
 
 test('1. Provenance: throws if any required provenance field is missing (no synthesis)', () => {
   assert.throws(() => {

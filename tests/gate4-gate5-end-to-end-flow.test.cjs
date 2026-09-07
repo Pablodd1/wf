@@ -5,9 +5,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { enforceListingDisplayContract } = require('../shared/listing-display-contract.cjs');
+const { adaptLegacyListingDisplayV1 } = require('../shared/listing-display-contract.cjs');
 
-test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail View -> Price Research', () => {
+test('Historical proposal adaptation preserves source evidence without claiming V2 publication or research eligibility', () => {
   const canaryProposalsPath = path.resolve('audit-output/mariadb-live/normalization-canary-10k/proposals.jsonl');
   assert.equal(fs.existsSync(canaryProposalsPath), true, 'proposals.jsonl must exist');
 
@@ -17,9 +17,13 @@ test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail 
   const sampleProposals = lines.slice(0, 100).map(l => JSON.parse(l));
 
   for (const proposal of sampleProposals) {
-    // 1. API contract validation
-    const displayRecord = enforceListingDisplayContract({
+    // 1. API contract validation.
+    // Phase 2 strict provenance: canary proposals lack V2 source_id/source_hash
+    // provenance, so they must be adapted through the explicit legacy V1 path
+    // (strict enforceListingDisplayContract now fails closed on these rows).
+    const displayRecord = adaptLegacyListingDisplayV1({
       id: proposal.source_id,
+      source_id: proposal.source_id,
       brand: proposal.brand,
       model: proposal.model,
       reference: proposal.reference,
@@ -37,7 +41,9 @@ test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail 
     });
 
     assert.equal(displayRecord.listing_display_contract_version, 'watchfacts-listing-display-v1');
-    assert.equal(displayRecord.source_listing_id, proposal.source_id);
+    assert.equal(displayRecord.source_id, proposal.source_id);
+    assert.equal(displayRecord.price_research_eligible, false, 'Legacy evidence never becomes qualified research through adaptation');
+    assert.notEqual(displayRecord.contract_version, 'v2.0');
 
     // 2. Trading Floor Card Parity
     if (proposal.trading_floor_eligible) {
@@ -46,7 +52,7 @@ test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail 
     }
 
     // 3. Detail View Parity
-    assert.equal(displayRecord.raw_message, proposal.raw_message || proposal.raw_message_evidence || null);
+    assert.equal(displayRecord.raw_message_text, proposal.raw_message || proposal.raw_message_evidence || null);
     if (proposal.image_key && proposal.image_url) {
       assert.equal(displayRecord.image_evidence_type, 'SOURCE_LISTING_IMAGE');
       assert.ok(displayRecord.thumbnail_url.includes(proposal.image_key));

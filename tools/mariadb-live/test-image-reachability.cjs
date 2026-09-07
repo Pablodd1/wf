@@ -9,7 +9,7 @@ async function testImages(sampleKeys = []) {
   const results = [];
 
   for (const key of sampleKeys) {
-    const url = ${DO_SPACES_BASE}/;
+    const url = `${DO_SPACES_BASE}/${key}`;
     try {
       const res = await fetch(url, { method: 'HEAD' });
       results.push({

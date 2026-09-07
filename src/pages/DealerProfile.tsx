@@ -11,11 +11,12 @@ interface ProfilePayload {
     rating: number | null; review_count: number | null; whatsapp_group_count: number | null; avatar_url: string | null; profile_summary: string | null;
     source_system?: string; source_rank?: number; member_since?: string | null; trust_status?: string | null;
   };
-  stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; current_counts_are_dynamic?: boolean; current_counts_scope?: string; captured_inventory_count?: number; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
+  stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: null; contact_action?: string | null; current_counts_are_dynamic?: boolean; current_counts_scope?: string; captured_inventory_count?: number; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; display_price?: string | null; listing_type: string; listing_date: string | null; created_at: string | null; raw_message?: string; image_url?: string | null; evidence_only?: boolean; identity_review_required?: boolean; identity_review_reason?: string | null; price_review_required?: boolean; price_review_reason?: string | null }>;
   reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
   groups?: Array<{ name: string | null; platform: string | null; membership_status: string | null }>;
   listing_total?: number;
+  next_cursor?: string | null;
   source_provenance?: { source_system: string; crawled_at: string | null; captured_listing_count?: number; captured_review_count?: number };
   dynamic_activity_status?: string;
   listing_linkage_status?: string;
@@ -25,15 +26,34 @@ interface ProfilePayload {
 
 export default function DealerProfile() {
   const { dealerId = '' } = useParams();
+  return <DealerProfileContent key={dealerId} dealerId={dealerId} />;
+}
+
+function DealerProfileContent({ dealerId }: { dealerId: string }) {
   const [payload, setPayload] = useState<ProfilePayload | null>(null);
   const [error, setError] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState('');
+
+  async function loadMore() {
+    if (!payload?.next_cursor || loadingMore) return;
+    setLoadingMore(true);
+    setPageError('');
+    try {
+      const response = await fetch(`/api/dealer-profile?id=${encodeURIComponent(dealerId)}&cursor=${encodeURIComponent(payload.next_cursor)}`, { credentials: 'include' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Unable to load more activity');
+      setPayload(current => current ? { ...body, listings: [...current.listings, ...body.listings] } : body);
+    } catch (caught) { setPageError(caught instanceof Error ? caught.message : 'Unable to load more activity'); }
+    finally { setLoadingMore(false); }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/dealer-profile?id=${encodeURIComponent(dealerId)}`, { credentials: 'include', signal: controller.signal })
       .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Unable to load profile'); return body; })
-      .then(setPayload)
-      .catch(caught => { if (caught?.name !== 'AbortError') setError(caught.message); });
+      .then(body => { if (!controller.signal.aborted) setPayload(body); })
+      .catch(caught => { if (!controller.signal.aborted) setError(caught.message); });
     return () => controller.abort();
   }, [dealerId]);
 
@@ -43,6 +63,7 @@ export default function DealerProfile() {
   const isPublicSourceProfile = dealer.source_system === 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
   const isLegacyProfile = dealer.source_system === 'WATCHFACTS_LEGACY_PROFILE_AUDIT_20260811';
   const isMariaDbCandidate = dealer.source_system === 'MARIADB_DEALER_CANDIDATE_RECONCILIATION_20260819';
+  const isSourcePoster = dealer.source_system === 'WATCHFACTS_SOURCE_POSTERS';
   const linkagePending = payload.listing_linkage_status === 'PENDING_EXACT_LISTING_LINKAGE';
   const sourceCandidateUnlinked = payload.listing_linkage_status === 'SOURCE_CANDIDATE_UNLINKED';
   const groupsAreCountOnly = payload.group_details_status === 'COUNT_ONLY' && (!payload.groups || payload.groups.length === 0);
@@ -77,7 +98,7 @@ export default function DealerProfile() {
                 {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]"><BadgeCheck size={15} /> {isPublicSourceProfile ? `Top Rated dealer evidence${dealer.source_rank ? ` #${dealer.source_rank}` : ''}` : isLegacyProfile ? 'Imported dealer evidence' : isMariaDbCandidate ? 'Reconciled source dealer candidate' : 'Verified dealer'}</div>
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]">{isSourcePoster ? <Users size={15} /> : <BadgeCheck size={15} />} {isSourcePoster ? 'Source poster · Dealer verification unavailable' : isPublicSourceProfile ? `Top Rated dealer evidence${dealer.source_rank ? ` #${dealer.source_rank}` : ''}` : isLegacyProfile ? 'Imported dealer evidence' : isMariaDbCandidate ? 'Reconciled source dealer candidate' : 'Verified dealer'}</div>
                 <h1 className="mt-3 font-serif text-4xl sm:text-5xl">{name}</h1>
                 <p className="mt-2 text-sm text-white/45">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
               </div>
@@ -93,7 +114,7 @@ export default function DealerProfile() {
 
       <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="grid gap-px bg-white/10 sm:grid-cols-3">
-          <ProfileMetric label="Total listings posted ever" value={linkagePending ? 'Pending linkage' : count(payload.listing_total ?? ((stats?.wts_count != null || stats?.wtb_count != null) ? (stats?.wts_count || 0) + (stats?.wtb_count || 0) : null))} />
+          <ProfileMetric label="Published linked listings" value={linkagePending ? 'Pending linkage' : count(payload.listing_total ?? ((stats?.wts_count != null || stats?.wtb_count != null) ? (stats?.wts_count || 0) + (stats?.wtb_count || 0) : null))} />
           <ProfileMetric label="For sale posts" value={linkagePending ? 'Pending linkage' : count(stats?.wts_count)} />
           <ProfileMetric label="Want to buy posts" value={linkagePending ? 'Pending linkage' : count(stats?.wtb_count)} />
         </div>
@@ -102,15 +123,15 @@ export default function DealerProfile() {
         {linkagePending && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">WTS, WTB, listing totals, and first/latest post dates are awaiting exact verified seller-to-listing linkage. Missing linkage is not displayed as zero activity.</p>}
         {sourceCandidateUnlinked && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">Counts shown are exact MariaDB source activity for this reconciled identity. Linking that identity to current Trading Floor cards remains pending and is not inferred by name.</p>}
         {isLegacyProfile && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">{stats?.current_counts_are_dynamic ? 'WTS/WTB totals and the listing cards below are calculated dynamically from the current released Rolex, Patek Philippe, and Audemars Piguet listing lineage.' : `Captured WTS/WTB values are historical source snapshots across ${stats?.snapshot_range?.snapshot_count || 0} observations. ${payload.dynamic_activity_status === 'UNLINKED_IDENTITY_NAMESPACE' ? 'This legacy ID has no exact match in the current released listing identity namespace, so no listing ownership is inferred by name.' : 'They do not replace live totals calculated from verified listing lineage.'}`}</p>}
-        {stats?.verified_contact_info?.phone && (
-          <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={`https://wa.me/${stats.verified_contact_info.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer">
-            <MessageCircle size={15} /> Contact verified poster on WhatsApp
+        {stats?.contact_action?.startsWith('/api/dealer-contact?') && (
+          <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={stats.contact_action} target="_blank" rel="noreferrer">
+            <MessageCircle size={15} /> Contact {isSourcePoster ? 'original' : 'verified'} poster on WhatsApp
           </a>
         )}
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <h2 className="text-xl font-semibold">Recent market activity</h2>
-          <span className="text-xs text-white/35">{Number(payload.listing_total ?? listings.length).toLocaleString()} {isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified linked posts'}</span>
+          <span className="text-xs text-white/35">{linkagePending ? 'Linkage pending' : `${Number(payload.listing_total ?? listings.length).toLocaleString()} ${isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified linked posts'}`}</span>
         </div>
         <div className="divide-y divide-white/10">
           {listings.map(listing => (
@@ -136,6 +157,8 @@ export default function DealerProfile() {
             </article>
           ))}
         </div>
+        {payload.next_cursor && <button type="button" disabled={loadingMore} onClick={loadMore} className="mt-5 border border-white/15 px-4 py-2 text-xs disabled:opacity-35">{loadingMore ? 'Loading activity...' : 'Load more activity'}</button>}
+        {pageError && <p role="alert" className="mt-3 text-sm text-amber-200">{pageError}</p>}
         {payload.reviews && payload.reviews.length > 0 && <section className="mt-12">
           <div className="flex items-center justify-between border-b border-white/10 pb-4"><h2 className="text-xl font-semibold">Dealer feedback</h2><span className="text-xs text-white/35">{payload.reviews.length} captured entries</span></div>
           <div className="grid gap-px bg-white/10 md:grid-cols-2">

@@ -2,6 +2,10 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { verifySourceContent } = require('./content-provenance.cjs');
+const { stableJson } = require('./lossless-payload-sanitizer.cjs');
+const { classify: classifyCategory } = require('./audit-non-watch.cjs');
+const { classifyNonWatch } = require('../../api/_lib/reference-quality.cjs');
 const {
   splitMessageLines,
   segmentDealerMessage,
@@ -126,6 +130,12 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     throw new Error('Missing required source_table');
   }
 
+  const sourceProof = verifySourceContent(stagedRow);
+  if (sourceProof.lossless) {
+    const error = new Error('PROVENANCE_LOSSLESS_REVIEW_REQUIRED');
+    error.code = 'PROVENANCE_LOSSLESS_REVIEW_REQUIRED';
+    throw error;
+  }
   const sourceId = String(stagedRow.source_id);
   const sourceHash = String(stagedRow.source_hash);
   const sourceSystem = String(stagedRow.source_system);
@@ -300,6 +310,11 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
 
   let tradingFloorStatus = 'HELD_UNKNOWN';
   let tradingFloorEligible = false;
+  // The legacy normalized_reference column is not independent watch evidence.
+  // A luxury brand/reference alone must not turn a bag or accessory into a watch.
+  const categoryEvidence = classifyCategory({ raw_data: { ...raw, normalized_reference: null } });
+  const accessoryEvidence = classifyNonWatch(String(listingTextEvidence || '').replace(/^\s*(?:WTS|WTB)\s*[:\-]?\s*/i, ''));
+  const categoryHeld = accessoryEvidence || categoryEvidence.category !== 'WATCH';
 
   if (!hasTextEvidence) {
     tradingFloorStatus = 'HELD_MISSING_SOURCE_TEXT';
@@ -309,6 +324,10 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     tradingFloorStatus = 'HELD_BUNDLE_UNSPLIT';
     reviewFlags.push('HELD_BUNDLE_REVIEW');
     exclusionReasons.push('BUNDLE_PARENT_UNSPLIT');
+  } else if (categoryHeld) {
+    tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
+    reviewFlags.push('WATCH_CATEGORY_REQUIRES_REVIEW');
+    exclusionReasons.push(accessoryEvidence || 'CATEGORY_' + categoryEvidence.category);
   } else if (!brand || !reference) {
     tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
     reviewFlags.push('INCOMPLETE_IDENTITY');
@@ -370,7 +389,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     reconciliationCategory = 'REVIEW_REQUIRED';
   }
 
-  const parserVersion = 'authoritative-normalizer-v9-separated-status';
+  const parserVersion = 'authoritative-normalizer-v11-category-bound';
 
   const contractObj = {
     source_id: sourceId,
@@ -462,7 +481,7 @@ function validateNormalizationStatuses(obj) {
   }
 }
 
-function computeProposalHash(contract) {
+function canonicalProposalJson(contract) {
   const fields = [
     'source_id',
     'source_hash',
@@ -473,10 +492,14 @@ function computeProposalHash(contract) {
     'source_observed_at',
     'posted_at',
     'listing_text_source',
+    'listing_text_evidence',
     'listing_text_sha256',
     'brand',
+    'brand_source_evidence',
     'model',
+    'model_source_evidence',
     'reference',
+    'reference_source_evidence',
     'dial_color',
     'year',
     'condition',
@@ -508,6 +531,7 @@ function computeProposalHash(contract) {
     'price_research_status',
     'price_research_eligible',
     'review_flags',
+    'reconciliation_category',
     'exclusion_reasons',
     'parser_version'
   ];
@@ -516,7 +540,20 @@ function computeProposalHash(contract) {
   for (const k of fields) {
     payload[k] = contract[k] === undefined ? null : contract[k];
   }
-  return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
+  // PostgreSQL renders timestamptz with +00:00; hash the same instant identically
+  // after a database round trip without changing raw source bytes.
+  for (const key of ['posted_at', 'source_observed_at']) {
+    if (payload[key] !== null) {
+      const instant = new Date(payload[key]);
+      if (!Number.isFinite(instant.getTime())) throw new Error('PROPOSAL_INVALID_TIMESTAMP');
+      payload[key] = instant.toISOString();
+    }
+  }
+  return stableJson(payload);
+}
+
+function computeProposalHash(contract) {
+  return crypto.createHash('sha256').update(canonicalProposalJson(contract)).digest('hex');
 }
 
 const DEFAULT_NYC3_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/';
@@ -646,7 +683,7 @@ function computeParentHash(parent) {
   for (const k of fields) {
     payload[k] = parent[k] === undefined ? null : parent[k];
   }
-  return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
+  return crypto.createHash('sha256').update(stableJson(payload)).digest('hex');
 }
 
 function computeChildProposalHash(child) {
@@ -687,7 +724,7 @@ function computeChildProposalHash(child) {
   for (const k of fields) {
     payload[k] = child[k] === undefined ? null : child[k];
   }
-  return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
+  return crypto.createHash('sha256').update(stableJson(payload)).digest('hex');
 }
 
 function normalizeCanonicalParentChild(stagedRow, options = {}) {
@@ -993,6 +1030,7 @@ module.exports = {
   normalizeAuthoritativeRow,
   normalizeCanonicalParentChild,
   computeProposalHash,
+  canonicalProposalJson,
   computeParentHash,
   computeChildProposalHash,
   buildAuthorizedInquiryContract,
@@ -1002,6 +1040,10 @@ module.exports = {
   resolveSourceTextEvidence,
   resolveStrictIntentFromText,
   extractYearFromText,
+  segmentDealerMessage,
+  extractReference,
+  inferBrandFromReference,
+  extractPriceCandidates,
   sha256
 };
 

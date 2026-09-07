@@ -44,8 +44,11 @@ const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evi
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
   LISTING_DISPLAY_CONTRACT_VERSION,
-  enforceListingDisplayContract,
+  adaptLegacyListingDisplayV1,
 } = require('../shared/listing-display-contract.cjs');
+// EXPLICIT LEGACY CHOICE: this endpoint serves unproven legacy reviewed-inventory
+// rows without V2 source_id/source_hash provenance, so it adapts via the legacy V1
+// path (never stamped v2.0, never price-research eligible) instead of strict V2.
 const {
   PRICE_SELECTOR: CURATED_SHADOW_PRICE_SOURCE,
   isShadowBrand,
@@ -1830,14 +1833,14 @@ module.exports = async function handler(req, res) {
     ]);
     const comparableRowsWithDealerEvidence = combinedDealerEvidenceRows
       .slice(0, comparableEvidenceRows.length)
-      .map(row => enforceListingDisplayContract({
+      .map(row => adaptLegacyListingDisplayV1({
         ...row,
         price_research_eligible: true,
         included_in_statistics: true,
       }));
     const outlierRowsWithDealerEvidence = combinedDealerEvidenceRows
       .slice(comparableEvidenceRows.length)
-      .map(row => enforceListingDisplayContract({
+      .map(row => adaptLegacyListingDisplayV1({
         ...row,
         price_research_eligible: false,
         included_in_statistics: false,

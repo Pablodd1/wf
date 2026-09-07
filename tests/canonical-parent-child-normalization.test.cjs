@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {
-  normalizeCanonicalParentChild,
+  normalizeCanonicalParentChild: productionNormalize,
   computeParentHash,
   computeChildProposalHash,
   buildAuthorizedInquiryContract,
@@ -15,6 +15,8 @@ const {
   DEFAULT_NYC3_BASE,
   sha256
 } = require('../tools/mariadb-live/authoritative-evidence-normalizer.cjs');
+const { capturedFixture } = require('./helpers/captured-fixture.cjs');
+const normalizeCanonicalParentChild = (row, options) => productionNormalize(capturedFixture(row), options);
 
 const BASE_STAGED_ROW = {
   source_id: 'test-uuid-001',

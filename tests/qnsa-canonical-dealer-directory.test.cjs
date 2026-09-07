@@ -39,8 +39,9 @@ test('listing reconciliation is bounded, cursor-driven, and release-view gated',
   assert.doesNotMatch(batchMigration, /UPDATE\s+(?:raw|staging)\.|DELETE\s+FROM\s+(?:raw|staging)\.|INSERT\s+INTO\s+(?:raw|staging)\./i);
 });
 
-test('directory and profile APIs prefer the canonical QNSA contracts', () => {
-  assert.match(dealersApi, /qnsa_dealer_directory_page/);
+test('directory uses the approved contract and profiles preserve the legacy path behind the V2 gate', () => {
+  assert.match(dealersApi, /get_approved_dealer_directory/);
+  assert.match(profileApi, /get_approved_dealer_profile_v2/);
   assert.match(profileApi, /qnsa_dealer_profile/);
   assert.match(profileApi, /raw_message_access:\s*true/);
 });

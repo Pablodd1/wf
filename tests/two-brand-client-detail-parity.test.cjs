@@ -22,12 +22,15 @@ const researchDetailApi = fs.readFileSync(
   'utf8',
 );
 
-test('Trading Floor uses only the reviewed inventory evidence returned for its page', () => {
-  assert.match(trading, /\/api\/reviewed-market-inventory\?/);
+test('V2 Trading Floor uses its validated card evidence and resolves contact through the gated endpoint', () => {
+  assert.match(trading, /canaryEnabled \? '\/api\/canary\/trading-floor'/);
+  assert.match(trading, /\/api\/reviewed-market-inventory/);
   assert.match(research, /\/api\/price-research-listing\?id=/);
-  assert.doesNotMatch(trading, /\/api\/(?:price-research-listing|trading-listing|listing-contact)\?id=/);
+  assert.doesNotMatch(trading, /\/api\/(?:price-research-listing|trading-listing)\?id=/);
+  assert.match(trading, /\/api\/listing-contact\?\$\{contactParams\.toString\(\)\}/);
   assert.match(research, /payload\.listing\?\.id !== row\.id/);
   assert.match(trading, /\/api\/reviewed-seller-summary\?id=/);
+  assert.match(trading, /if \(listing\.contract_version !== 'v2.0'\) fetch\(`\/api\/reviewed-seller-summary/);
   assert.doesNotMatch(trading, /\{listing\.image_evidence_notice &&|EvidenceIndicators/);
   assert.match(trading, /SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE/);
   assert.match(research, /detail\?\.image_urls/);

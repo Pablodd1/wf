@@ -2,10 +2,14 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { inspectAttr } from 'plugin-inspect-react-code'
+import { createRequire } from 'node:module'
+const require = createRequire(import.meta.url)
+const { preparePublicAssets } = require('./tools/prepare-public-assets.cjs')
 
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  publicDir: preparePublicAssets(__dirname),
   define: {
     'import.meta.env.VITE_APP_BUILD_ID': JSON.stringify(
       process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || 'local',

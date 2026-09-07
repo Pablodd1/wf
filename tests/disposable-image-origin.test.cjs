@@ -1,0 +1,20 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { buildRc50Fixtures } = require('../tools/canary-e2e/run-rc50-preview.cjs');
+const { enforceListingDisplayContract } = require('../api/_lib/canary-display-contract.cjs');
+test('synthetic preview image transport preserves strict contracts and refuses production or real evidence', t => {
+  const keys=['DISPOSABLE_IMAGE_BASE_URL','WF_DISPOSABLE_PREVIEW','VERCEL_ENV'];
+  const saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  t.after(()=>keys.forEach(k=>saved[k]===undefined?delete process.env[k]:process.env[k]=saved[k]));
+  keys.forEach(k=>delete process.env[k]);
+  const row=buildRc50Fixtures('https://unused.example.test').rows[0];
+  const normal=enforceListingDisplayContract(row);
+  process.env.DISPOSABLE_IMAGE_BASE_URL='https://fixture-example.trycloudflare.com/images';
+  process.env.WF_DISPOSABLE_PREVIEW='true'; process.env.VERCEL_ENV='preview';
+  const preview=enforceListingDisplayContract(row);
+  assert.equal(preview.image_url,'https://fixture-example.trycloudflare.com/images/'+row.image_key);
+  assert.deepEqual({...preview,image_url:normal.image_url,thumbnail_url:normal.thumbnail_url},normal);
+  assert.throws(()=>enforceListingDisplayContract({...row,raw_message_text:'Real source evidence'}),/refused/);
+  process.env.VERCEL_ENV='production';
+  assert.throws(()=>enforceListingDisplayContract(row),/refused/);
+});

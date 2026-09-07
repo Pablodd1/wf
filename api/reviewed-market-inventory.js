@@ -3,7 +3,6 @@
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { listCanonicalCatalogReferences, listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
-const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
@@ -14,8 +13,11 @@ const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normal
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
   LISTING_DISPLAY_CONTRACT_VERSION,
-  enforceListingDisplayContract,
+  adaptLegacyListingDisplayV1,
 } = require('../shared/listing-display-contract.cjs');
+// EXPLICIT LEGACY CHOICE: this endpoint serves unproven legacy reviewed-inventory
+// rows without V2 source_id/source_hash provenance, so it adapts via the legacy V1
+// path (never stamped v2.0, never price-research eligible) instead of strict V2.
 const {
   MARKET_SELECTOR: CURATED_SHADOW_MARKET_SOURCE,
   isShadowBrand,
@@ -1232,15 +1234,8 @@ function mapReviewedRecord(row) {
     : null;
   const directRating = positiveNumber(row.dealer_rating);
   const directReviewCount = Number(row.review_count || 0);
-  const publicRatedEvidence = ratedDealerEvidence({
-    dealerId: row.dealer_id || row.company_id,
-    phone: sellerPhone,
-  });
   const ratingEvidenceStatus = directRating !== null && directReviewCount > 0
-    ? 'SOURCE_SUPPLIED'
-    : publicRatedEvidence?.review_count > 0
-      ? 'SOURCE_FEEDBACK_COUNT'
-      : 'UNAVAILABLE';
+    ? 'SOURCE_SUPPLIED' : 'UNAVAILABLE';
   const referenceSearchKey = row.reference_search_key
     || referenceComparisonKey(reference)
     || null;
@@ -1368,9 +1363,9 @@ function mapReviewedRecord(row) {
     seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' ? directRating : null,
     seller_review_count: ratingEvidenceStatus === 'SOURCE_SUPPLIED'
       ? directReviewCount
-      : publicRatedEvidence?.review_count || 0,
+      : 0,
     seller_rating_evidence_status: ratingEvidenceStatus,
-    seller_trust_status: publicRatedEvidence?.trust_status || null,
+    seller_trust_status: null,
     // Legacy crawl provenance remains private; the public payload carries only
     // the source-backed rating/feedback result and canonical profile path.
     seller_rating_source_url: null,
@@ -2513,7 +2508,15 @@ module.exports = async function handler(req, res) {
     queryParams.set('limit', String(qnsaBrandScanLimit));
     if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuc2Fmb3Nha3ZvbnpnZmNzcGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjI3NDEsImV4cCI6MjEwMTU5ODc0MX0.YUxMjnTHtgPsiWiWko3TS1A47Sjk33SuHC2TND0Rxmg';
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseKey) {
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      return res.status(503).json({
+        status: 'error',
+        code: 'CONFIGURATION_REQUIRED',
+        error: 'Database service key is not configured',
+      });
+    }
     const headers = {
       'apikey': supabaseKey,
       'Authorization': `Bearer ${supabaseKey}`,
@@ -3337,7 +3340,7 @@ module.exports = async function handler(req, res) {
     const publicBaseRecords = (reviewedOverlayLaneActive ? [] : records)
       .map(applyConfirmedFiveWatchPublication);
     const deduplicatedPage = deduplicateRecordsById([...publicBaseRecords, ...reviewedOverlayRecords]);
-    const combinedPageRecords = deduplicatedPage.records.map(enforceListingDisplayContract);
+    const combinedPageRecords = deduplicatedPage.records.map(adaptLegacyListingDisplayV1);
     const combinedPageDuplicateCount = deduplicatedPage.duplicateCount;
     // Serialize the cohort-wide count after the bounded page has been fetched,
     // mapped and filtered. Running both cold scans in parallel caused avoidable
