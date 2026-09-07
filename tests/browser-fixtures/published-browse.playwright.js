@@ -1,0 +1,103 @@
+async page => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await page.goto('about:blank');
+  const origin = 'https://wf-ecru.vercel.app';
+  const live = await (await page.request.get(origin + '/api/canary/trading-floor?pageSize=100')).json();
+  const research = await (await page.request.get(origin + '/api/canary/price-research?pageSize=100')).json();
+  const rows = live.records;
+  if (!Array.isArray(rows) || rows.length !== 100) throw new Error('Live fixture unavailable');
+  const group = (items, field) => [...new Set(items.map(item => item[field] || 'Reference-only listings'))].map(value => {
+    const members = items.filter(item => (item[field] || 'Reference-only listings') === value);
+    return { [field]: value, listing_count: members.length, model_count: new Set(members.map(item => item.model)).size, reference_count: new Set(members.map(item => item.reference)).size, image_url: members.find(item => item.image_url)?.image_url };
+  });
+  const brands = group(rows, 'brand');
+  const regions = [...new Set(rows.map(item => item.location_region).filter(Boolean))];
+  const calls = [];
+  let slowBrand = '';
+  await page.route('**/api/**', async route => {
+    const [pathname, query = ''] = route.request().url().replace(/^https?:\/\/[^/]+/, '').split('?');
+    const values = Object.fromEntries(query.split('&').filter(Boolean).map(pair => pair.split('=').map(part => decodeURIComponent(part.replace(/\+/g, ' ')))));
+    const url = { pathname, search: '?' + query, searchParams: { get: key => values[key], has: key => key in values } };
+    calls.push(url.pathname + url.search);
+    let payload = {};
+    if (url.pathname === '/api/canary/browse') {
+      const brand = url.searchParams.get('brand');
+      const model = url.searchParams.get('model');
+      let members = brand ? rows.filter(item => item.brand === brand) : rows;
+      const models = group(members, 'model');
+      if (model) members = members.filter(item => (item.model || 'Reference-only listings') === model);
+      payload = { success: true, snapshot_id: 'fixture-source-backed', brands, models, references: group(members, 'reference'), availableRegions: regions };
+      if (brand === slowBrand) await page.waitForTimeout(600);
+    } else if (url.pathname === '/api/canary/trading-floor') {
+      const size = Number(url.searchParams.get('pageSize') || 50);
+      let members = rows.filter(item => !url.searchParams.get('brand') || item.brand === url.searchParams.get('brand'));
+      if (url.searchParams.get('model')) members = members.filter(item => (item.model || 'Reference-only listings') === url.searchParams.get('model'));
+      if (url.searchParams.get('sort') === 'discovery') members = [...members].reverse();
+      const offset = url.searchParams.has('cursor') ? size : 0;
+      payload = { ...live, records: members.slice(offset, offset + size), total: members.length, hasMore: offset + size < members.length, nextCursor: offset + size < members.length ? 'fixture-page2' : null };
+    } else if (url.pathname === '/api/canary/price-research') payload = research;
+    else if (url.pathname === '/api/catalog-suggestions') payload = { success: true, suggestions: [] };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('http://127.0.0.1:5187/#/trading');
+  await page.locator('article[data-listing-id]').nth(49).waitFor();
+  const options = await page.locator('#brand-filter option').evaluateAll(items => items.map(item => item.value).filter(Boolean));
+  if (JSON.stringify(options.slice().sort()) !== JSON.stringify(brands.map(item => item.brand).sort())) throw new Error('Population brands incomplete');
+  const ids = () => page.locator('article[data-listing-id]').evaluateAll(items => items.map(item => item.dataset.listingId));
+  const before = await ids();
+  await page.locator('#sort-filter').selectOption('discovery');
+  await page.waitForFunction(id => document.querySelector('article[data-listing-id]')?.dataset.listingId === id, rows[99].listing_id);
+  const after = await ids();
+  if (after[0] !== rows[99].listing_id) throw new Error('Discovery server order not retained');
+  await page.locator('#sort-filter').selectOption('newest');
+  await page.waitForFunction(id => document.querySelector('article[data-listing-id]')?.dataset.listingId === id, before[0]);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.waitForFunction(id => document.querySelector('article[data-listing-id]')?.dataset.listingId === id, rows[50].listing_id);
+  if ((await ids()).some(id => before.includes(id))) throw new Error('Page overlap');
+  await page.getByRole('button', { name: 'Previous', exact: true }).click();
+  await page.waitForFunction(id => document.querySelector('article[data-listing-id]')?.dataset.listingId === id, before[0]);
+  if (regions.length > 1) {
+    const selected = regions.slice(0, 2);
+    await page.getByRole('checkbox', { name: selected[0], exact: true }).click();
+    await page.getByRole('checkbox', { name: selected[1], exact: true }).click();
+    await page.waitForFunction(expected => JSON.stringify(JSON.parse(new URLSearchParams(location.hash.split('?')[1]).get('location'))) === JSON.stringify(expected), selected);
+    await page.waitForTimeout(250);
+    const regionCalls = calls.filter(path => path.startsWith('/api/canary/trading-floor?') && path.includes('regions='));
+    if (!regionCalls.some(path => decodeURIComponent(path.replace(/\+/g, ' ')).includes(JSON.stringify(selected)))) throw new Error('Region array serialization');
+    await page.getByRole('checkbox', { name: 'All locations', exact: true }).click();
+  }
+  await page.goto('http://127.0.0.1:5187/#/price-research');
+  await page.getByRole('button', { name: /Rolex/ }).first().waitFor();
+  const select = page.locator('select').filter({ has: page.locator('option[value="Rolex"]') }).first();
+  slowBrand = 'Rolex';
+  await select.selectOption('Rolex');
+  await select.selectOption('Patek Philippe');
+  await page.getByRole('button', { name: /Other exact references/ }).first().waitFor();
+  await page.waitForTimeout(800);
+  if (await select.inputValue() !== 'Patek Philippe') throw new Error('Brand selection race');
+  const modelText = await page.locator('body').textContent();
+  const expectedModels = group(rows.filter(item => item.brand === 'Patek Philippe'), 'model');
+  for (const item of expectedModels) if (!modelText.includes(item.model === 'Reference-only listings' ? 'Other exact references' : item.model)) throw new Error('Final models mismatch');
+  await page.getByRole('button', { name: /Other exact references/ }).first().click();
+  await page.getByPlaceholder(/Search all .* exact references/).waitFor();
+  const exactReference = rows.find(item => item.brand === 'Patek Philippe' && !item.model)?.reference;
+  if (exactReference) {
+    await page.getByPlaceholder(/Search all .* exact references/).fill(exactReference);
+    if (!(await page.locator('body').textContent()).includes(exactReference)) throw new Error('Reference-only search unavailable');
+  }
+  if (calls.some(path => /^\/api\/(?:catalog-models|catalog-references|model-stats|reviewed-market-inventory|price-research-batch-summary)/.test(path))) throw new Error('Legacy browse called in V2');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('http://127.0.0.1:5187/#/trading');
+  await page.locator('article[data-listing-id]').nth(23).waitFor();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+  if (overflow) throw new Error('Mobile overflow');
+  const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
+  return result;
+}
+
+
+
+
+
+

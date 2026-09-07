@@ -10,6 +10,7 @@ import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShort
 import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
 import { loadPriceResearchBatchSummaries } from '../utils/priceResearchBatchSummary';
 import { isHeldRolexPatekBrand } from '../utils/rolexPatekPublication';
+import { canaryBrowseEnabled, loadPublishedBrowse } from '../utils/publishedBrowse';
 import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
 
 function referenceEvidenceKey(brand: string, reference: string) {
@@ -514,7 +515,7 @@ const BLUE = '#0d6efd';
 const WTB_LISTING_PAGE_SIZE = 24;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega', 'Tudor']
-  .filter(brand => !isHeldRolexPatekBrand(brand));
+  .filter(brand => canaryBrowseEnabled || !isHeldRolexPatekBrand(brand));
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const displayCatalogModel = (model: string) => model === REFERENCE_ONLY_MODEL ? 'Other exact references' : model;
 
@@ -672,7 +673,10 @@ const DEFAULT_RESEARCH_BRANDS: { brand: string }[] = [
 ].filter(brand => !isHeldRolexPatekBrand(brand)).map(brand => ({ brand }));
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>(DEFAULT_RESEARCH_BRANDS);
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>(canaryBrowseEnabled ? [] : DEFAULT_RESEARCH_BRANDS);
+  const browseSnapshotRef = useRef<string | undefined>(undefined);
+  const pickerRequestRef = useRef<AbortController | null>(null);
+  const researchRequestRef = useRef<AbortController | null>(null);
   const [pBrand, setPBrand] = useState(initialBrand);
   const [pModels, setPModels] = useState<{ model: string; reference_count: number; listing_count?: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
@@ -702,15 +706,30 @@ const DEFAULT_RESEARCH_BRANDS: { brand: string }[] = [
   const [mStats, setMStats] = useState<ModelStats | null>(null);
 
   const loadModels = useCallback(async (brand: string) => {
+    researchRequestRef.current?.abort();
+    setLoading(false); setData(null); setError('');
+    pickerRequestRef.current?.abort();
+    const controller = new AbortController();
+    pickerRequestRef.current = controller;
 setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setModelQuery(''); setReferenceQuery(''); setPickerError(''); setMStats(null);
-    if (!brand) return;
+    if (!brand) { setPLoading(''); return; }
     setPLoading('models');
     try {
+      if (canaryBrowseEnabled) {
+        const payload = await loadPublishedBrowse('price_research', brand, '', controller.signal, browseSnapshotRef.current);
+        if (controller.signal.aborted) return;
+        browseSnapshotRef.current = payload.snapshot_id;
+        setPBrands(payload.brands);
+        setPModels(payload.models);
+        setModelImages(Object.fromEntries(payload.models.filter(item => item.image_url).map(item => [item.model, item.image_url!])));
+        return;
+      }
       const [r, imageResponse] = await Promise.all([
-        fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`),
-        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&images=true&pageSize=100`).catch(() => null),
+        fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`, { signal: controller.signal }),
+        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&images=true&pageSize=100`, { signal: controller.signal }).catch(() => null),
       ]);
       const d = await r.json();
+      if (controller.signal.aborted) return;
       if (!r.ok || !d.success) {
         setPickerError(d.error || 'Models are temporarily unavailable');
         return;
@@ -718,6 +737,7 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
       setPModels(d.models || []);
       if (imageResponse?.ok) {
         const imagePayload = await imageResponse.json().catch(() => null) as ReviewedMarketResponse | null;
+        if (controller.signal.aborted) return;
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const model = String(record.model || '').trim();
@@ -726,25 +746,44 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
         }
         setModelImages(nextImages);
       }
-    } catch { /* ignore — direct search still works */ }
-    finally { setPLoading(''); }
+    } catch (requestError) {
+      if (!controller.signal.aborted) setPickerError(requestError instanceof Error ? requestError.message : 'Models are temporarily unavailable');
+    }
+    finally { if (!controller.signal.aborted) setPLoading(''); }
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
+    pickerRequestRef.current?.abort();
+    const controller = new AbortController();
+    pickerRequestRef.current = controller;
 setPModel(model); setPRefs([]); setReferenceQuery(''); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setPickerError(''); setMStats(null);
-    if (!brand || !model) return;
+    if (!brand || !model) { setPLoading(''); return; }
     setPLoading('refs');
     try {
+      if (canaryBrowseEnabled) {
+        const payload = await loadPublishedBrowse('price_research', brand, model, controller.signal, browseSnapshotRef.current);
+        if (controller.signal.aborted) return;
+        browseSnapshotRef.current = payload.snapshot_id;
+        setPRefs(payload.references.map(item => ({ ...item, avg_price: null })));
+        setReferenceImages(Object.fromEntries(payload.references.filter(item => item.image_url).map(item => [item.reference.toUpperCase(), item.image_url!])));
+        setReferenceEvidence(Object.fromEntries(payload.references.map(item => [referenceEvidenceKey(brand, item.reference), {
+          count: item.listing_count, wtsCount: item.wts_count, wtbCount: item.wtb_count,
+          hasMore: false, image: item.image_url || '',
+        }])));
+        return;
+      }
       const [r, ms, imageResponse] = await Promise.all([
-        fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`),
-        fetch(`/api/model-stats?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).catch(() => null),
-        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&q=${encodeURIComponent(model)}&images=true&pageSize=100`).catch(() => null),
+        fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`, { signal: controller.signal }),
+        fetch(`/api/model-stats?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`, { signal: controller.signal }).catch(() => null),
+        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&q=${encodeURIComponent(model)}&images=true&pageSize=100`, { signal: controller.signal }).catch(() => null),
       ]);
       const d = await r.json();
+      if (controller.signal.aborted) return;
 if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily unavailable');
       setPRefs(d.references || []);
       if (imageResponse?.ok) {
         const imagePayload = await imageResponse.json().catch(() => null) as ReviewedMarketResponse | null;
+        if (controller.signal.aborted) return;
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const reference = String(record.reference || '').trim().toUpperCase();
@@ -755,12 +794,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       }
       if (ms) {
         const md = await ms.json().catch(() => null);
+        if (controller.signal.aborted) return;
         if (md?.success) setMStats({ total: md.total, wts: md.wts, wtb: md.wtb, stats: md.stats, first_seen: md.first_seen, last_seen: md.last_seen });
       }
     } catch (requestError) {
-      setPickerError(requestError instanceof Error ? requestError.message : 'References are temporarily unavailable');
+      if (!controller.signal.aborted) setPickerError(requestError instanceof Error ? requestError.message : 'References are temporarily unavailable');
     }
-    finally { setPLoading(''); }
+    finally { if (!controller.signal.aborted) setPLoading(''); }
   }, []);
 
   const fetchData = useCallback(async (
@@ -779,6 +819,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       setError('Enter a reference to search');
       return;
     }
+    researchRequestRef.current?.abort();
+    const controller = new AbortController();
+    researchRequestRef.current = controller;
+    pickerRequestRef.current?.abort();
+    setPLoading('');
     setLoading(true);
     setError('');
     setAnalyticsNotice('');
@@ -810,9 +855,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         params.set('demandPage', String(demandPage));
       }
       const r = canaryEnabled
-        ? await fetch(`/api/canary/price-research?${params.toString()}`, { credentials: 'include' })
-        : await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
+        ? await fetch(`/api/canary/price-research?${params.toString()}`, { credentials: 'include', signal: controller.signal })
+        : await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include', signal: controller.signal });
       const d = await r.json();
+      if (controller.signal.aborted) return;
       if (d.success) {
         setData(d);
         if (targetCursorIndex !== undefined) {
@@ -836,11 +882,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         ? `Qualified market price analytics for ${brand} ${normalizedReference} are compiling. Searching across live dealer observations…`
         : 'Select a brand and reference to view market price research.');
     } catch {
+      if (controller.signal.aborted) return;
       setAnalyticsNotice(brand
         ? `Loading price evidence for ${brand} ${normalizedReference}. Select a suggestion from the search box to view exact model analytics.`
         : 'Select a brand and reference to view market price research.');
     }
-    finally { setLoading(false); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
   }, []);
 
   const selectReferenceSuggestion = useCallback((suggestion: CatalogSuggestion) => {
@@ -897,8 +944,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   useEffect(() => {
     const controller = new AbortController();
-    // The V2 lane uses catalog names as search options, not legacy release counts.
-    if (import.meta.env.VITE_USE_CANARY_V2 === 'true') return () => controller.abort();
+    if (canaryBrowseEnabled) {
+      void loadPublishedBrowse('price_research', '', '', controller.signal)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          browseSnapshotRef.current ??= payload.snapshot_id;
+          setPBrands(payload.brands);
+        })
+        .catch(error => { if (error?.name !== 'AbortError') setPickerError('Published watch options are temporarily unavailable'); });
+      return () => controller.abort();
+    }
     Promise.all([
       fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal }).then(response => response.json()),
       fetch('/api/live-release-summary', { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null),
@@ -947,6 +1002,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       })
       .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => () => {
+    pickerRequestRef.current?.abort();
+    researchRequestRef.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -1245,6 +1305,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   }, [referencePage, referencePageCount]);
 
   useEffect(() => {
+    if (canaryBrowseEnabled) return;
     if (!pBrand || !visibleRefs.length) return;
     const pending = visibleRefs.filter(item => !referenceEvidence[referenceEvidenceKey(pBrand, item.reference)]);
     if (!pending.length) return;
@@ -1438,9 +1499,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (
             <nav aria-label="Catalog selection" className="mb-4 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
-              <button type="button" onClick={() => { setPBrand(''); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setReferenceQuery(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
+              <button type="button" onClick={() => { void loadModels(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
               {pBrand && <span aria-hidden="true">/</span>}
-              {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); setReferenceQuery(''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
+              {pBrand && <button type="button" onClick={() => { void loadRefs(pBrand, ''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
               {pModel && <span aria-hidden="true">/</span>}
               {pModel && <span>{displayCatalogModel(pModel)}</span>}
             </nav>
@@ -1644,7 +1705,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         {data && (
           <>
             <nav aria-label="Price Research path" className="mb-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
-              <button type="button" onClick={() => { setData(null); setError(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Browse</button>
+              <button type="button" onClick={() => { researchRequestRef.current?.abort(); setLoading(false); setData(null); setError(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Browse</button>
               <span aria-hidden="true">/</span><span>{data.brand}</span>
               {data.model && <><span aria-hidden="true">/</span><span>{data.model}</span></>}
               <span aria-hidden="true">/</span><span>{displayRef}</span>

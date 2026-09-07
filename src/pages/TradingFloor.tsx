@@ -19,6 +19,7 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
+import { canaryBrowseEnabled, loadPublishedBrowse } from '../utils/publishedBrowse';
 import { ambiguousPriceDisplay, strongestPostingIdentity, listingAvailabilityLabel } from '../lib/customerEvidence';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
@@ -92,6 +93,10 @@ const SORT_OPTIONS = [
   { label: 'Newest observed', value: 'newest' },
   { label: 'Discovery mix', value: 'discovery' },
 ] as const;
+
+function serializeLocations(locations: string[]) {
+  return locations.length ? (canaryBrowseEnabled ? JSON.stringify(locations) : locations.join(',')) : null;
+}
 
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
 import type { ListingDisplayContract } from '../types/listing-display-contract';
@@ -478,10 +483,17 @@ export default function TradingFloor() {
   const requestedLocationParam = searchParams.get('location') || '';
   const locationFilters = useMemo(() => {
     if (!requestedLocationParam) return [];
+    if (canaryBrowseEnabled && requestedLocationParam.startsWith('[')) {
+      try {
+        const values: unknown = JSON.parse(requestedLocationParam);
+        return Array.isArray(values) ? values.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())) : [];
+      } catch { return []; }
+    }
     return requestedLocationParam.split(',').map(s => s.trim()).filter(Boolean);
   }, [requestedLocationParam]);
 
-  const [releaseBrands, setReleaseBrands] = useState<string[]>(MASTER_BRAND_LIST);
+  const [releaseBrands, setReleaseBrands] = useState<string[]>(canaryBrowseEnabled ? [] : MASTER_BRAND_LIST);
+  const browseSnapshotRef = useRef<string | undefined>(undefined);
   const [modelOptions, setModelOptions] = useState<CatalogModelOption[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
@@ -523,6 +535,7 @@ export default function TradingFloor() {
     sortMode !== 'newest',
   ].filter(Boolean).length;
   const locationOptions = useMemo(() => {
+    if (canaryBrowseEnabled) return [...new Set([...locationFilters, ...discoveredLocations])].sort((a, b) => a.localeCompare(b));
     const countries = listings
       .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
       .filter((value): value is string => Boolean(value));
@@ -553,7 +566,7 @@ export default function TradingFloor() {
       chips.push({
         key: `location-${location}`,
         label: location,
-        updates: { location: remaining.length ? remaining.join(',') : null },
+        updates: { location: serializeLocations(remaining) },
       });
     }
     return chips;
@@ -580,6 +593,19 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
+    if (canaryBrowseEnabled) {
+      setModelOptions([]);
+      void loadPublishedBrowse('trading_floor', brandFilter, '', controller.signal, browseSnapshotRef.current)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          browseSnapshotRef.current = payload.snapshot_id;
+          setReleaseBrands(payload.brands.map(item => item.brand));
+          setModelOptions(payload.models);
+          setDiscoveredLocations(payload.availableRegions || []);
+        })
+        .catch(error => { if (error?.name !== 'AbortError') setModelOptions([]); });
+      return () => controller.abort();
+    }
     if (!brandFilter) {
       setModelOptions([]);
       return () => controller.abort();
@@ -779,7 +805,9 @@ export default function TradingFloor() {
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
         if (pricedOnly) params.set('priced', 'true');
-        if (locationFilters.length > 0) params.set('region', locationFilters.join(','));
+        if (locationFilters.length > 0) {
+          params.set(canaryBrowseEnabled ? 'regions' : 'region', canaryBrowseEnabled ? JSON.stringify(locationFilters) : locationFilters.join(','));
+        }
 
         const usesReviewedWatchInventory = ['all', 'watches'].includes(categoryFilter);
         if (!usesReviewedWatchInventory) {
@@ -791,6 +819,7 @@ export default function TradingFloor() {
           params.delete('type');
         }
         const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        if (canaryEnabled && sortMode === 'discovery') params.set('sort', 'discovery');
         const endpoint = canaryEnabled ? '/api/canary/trading-floor' : (usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest');
         const combinedAllInventory = !canaryEnabled && combinedFeedActive;
         let data: TradingFloorResponse;
@@ -829,16 +858,16 @@ export default function TradingFloor() {
         let totalCount: number | null = null;
 
         if (data.status === 'ok' && Array.isArray(data.records)) {
-          if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
+          if (!canaryEnabled && Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
             const validBrandStrings = data.publicationBrands
               .map((b: any) => typeof b === 'string' ? b : (typeof b?.brand === 'string' ? b.brand : ''))
               .filter(Boolean);
             setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...validBrandStrings])]);
-          } else {
+          } else if (!canaryEnabled) {
             setReleaseBrands(MASTER_BRAND_LIST);
           }
           nextListings = data.records;
-          if (Array.isArray(data.availableCountries)) {
+          if (!canaryEnabled && Array.isArray(data.availableCountries)) {
             setDiscoveredLocations(current => [...new Set([...current, ...data.availableCountries!.filter(Boolean)])].sort((a, b) => a.localeCompare(b)));
           }
           totalCount = data.total == null ? null : Number(data.total);
@@ -853,7 +882,7 @@ export default function TradingFloor() {
         const nextCountries = nextListings
           .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
           .filter((value): value is string => Boolean(value));
-        if (nextCountries.length > 0) {
+        if (!canaryEnabled && nextCountries.length > 0) {
           setDiscoveredLocations(current => [...new Set([...current, ...nextCountries])].sort((a, b) => a.localeCompare(b)));
         }
         setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
@@ -1043,7 +1072,7 @@ export default function TradingFloor() {
               sort: next.sort === 'newest' ? null : next.sort,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
-              location: next.locations.length ? next.locations.join(',') : null,
+              location: serializeLocations(next.locations),
             }, false);
           }}
           onClose={() => setFiltersOpen(false)}
@@ -1250,7 +1279,7 @@ function DesktopFilters({
     const updated = selectedLocations.includes(loc)
       ? selectedLocations.filter(value => value !== loc)
       : [...selectedLocations, loc];
-    onChange({ location: updated.length ? updated.join(',') : null });
+    onChange({ location: serializeLocations(updated) });
   };
 
   const hasActiveFilters = Boolean(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0 || sort !== 'newest');
