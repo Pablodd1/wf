@@ -1,0 +1,15 @@
+{
+  "reason": "Historical SQL references dealer_id without qualifying two joined relations. Qualify the intended immutable link identity for disposable replay; original migration bytes remain unchanged. Later directory definitions supersede this function.",
+  "original_sha256": "4b07fa4e3ebdcb2967e454bb15fb29a626c1f209353c1980c246e402af5958e0",
+  "replacements": [
+    {
+      "old": "SELECT dealer_id,",
+      "new": "SELECT link.dealer_id,"
+    },
+    {
+      "old": "GROUP BY dealer_id",
+      "new": "GROUP BY link.dealer_id"
+    }
+  ],
+  "canonical_lf_sha256": "ca40d4533ab45913dd3be8202413b30b37d54676702159bf7b5c9f4a7ae7690e"
+}

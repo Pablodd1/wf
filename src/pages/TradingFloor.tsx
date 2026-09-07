@@ -19,7 +19,7 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
-import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import { ambiguousPriceDisplay, strongestPostingIdentity, listingAvailabilityLabel } from '../lib/customerEvidence';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
   loadPriceResearchBatchSummaries,
@@ -94,7 +94,7 @@ const SORT_OPTIONS = [
 ] as const;
 
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
-import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
+import type { ListingDisplayContract } from '../types/listing-display-contract';
 
 interface ListingRecord extends Partial<ListingDisplayContract> {
   id: string;
@@ -116,7 +116,7 @@ interface ListingRecord extends Partial<ListingDisplayContract> {
   dial_color: string | null;
   condition: string | null;
   year: number | null;
-  intent?: string | null;
+  intent?: 'WTS' | 'WTB' | null;
   listing_type: string;
   verdict: string | null;
   source: string;
@@ -322,10 +322,14 @@ async function loadRandomAllInventory({
     if (imagesOnly) params.set('images', 'true');
     if (pricedOnly) params.set('priced', 'true');
     if (countries.length > 0) params.set('region', countries.join(','));
-    params.set('sourceShape', listingLane);
-    const brandCursor = decoded?.brandCursors?.[brand];
-    if (brandCursor) params.set('cursor', brandCursor);
-    const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
+    const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+    if (!canaryEnabled) {
+      params.set('sourceShape', listingLane);
+      const brandCursor = decoded?.brandCursors?.[brand];
+      if (brandCursor) params.set('cursor', brandCursor);
+    }
+    const inventoryEndpoint = canaryEnabled ? '/api/canary/trading-floor' : '/api/reviewed-market-inventory';
+    const response = await fetch(`${inventoryEndpoint}?${params.toString()}`, { signal });
     const payload = response.ok ? await response.json() as TradingFloorResponse : { status: 'error' };
     return { brand, payload };
   }));
@@ -530,6 +534,7 @@ export default function TradingFloor() {
   const dynamicDisplayTotal = total !== null && total >= 0 ? total : null;
 
   const visibleListings = useMemo(() => {
+    if (import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') return listings;
     if (sortMode === 'newest') return [...listings].sort(newestObservedOrder);
     if (combinedFeedActive) return listings;
     return discoveryOrderWithinSourceLanes(listings, 0x57fa2c1d, cursorHistory.length + 1);
@@ -693,7 +698,7 @@ export default function TradingFloor() {
     const unique = new Map<string, PriceResearchBatchPair>();
     for (const listing of visibleListings) {
       if (!listing.brand || !listing.reference || String(listing.listing_type).toUpperCase() !== 'WTS') continue;
-      const pair = { brand: listing.brand, reference: listing.reference, dial: cleanValue(listing.dial_color) || null };
+      const pair = listingPricePair(listing);
       unique.set(priceResearchSummaryKey(pair), pair);
     }
     return [...unique.values()];
@@ -785,8 +790,9 @@ export default function TradingFloor() {
           params.delete('model');
           params.delete('type');
         }
-        const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
-        const combinedAllInventory = combinedFeedActive;
+        const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        const endpoint = canaryEnabled ? '/api/canary/trading-floor' : (usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest');
+        const combinedAllInventory = !canaryEnabled && combinedFeedActive;
         let data: TradingFloorResponse;
         try {
           if (combinedAllInventory) {
@@ -871,6 +877,16 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
+      {/* The V2 API is also used in production; only disposable data receives this label. */}
+      {import.meta.env.VITE_DISPOSABLE_PREVIEW === 'true' && (
+        <div
+          data-testid="preview-fixture-banner"
+          role="status"
+          style={{ background: '#7F1D1D', color: '#FEF3C7', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+        >
+          Disposable preview data — not live market data
+        </div>
+      )}
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -1048,11 +1064,7 @@ export default function TradingFloor() {
             key={selectedListing.id}
             listing={selectedListing}
             benchmark={
-              ratingsCache[priceResearchSummaryKey({
-                brand: selectedListing.brand,
-                reference: selectedListing.reference || '',
-                dial: cleanValue(selectedListing.dial_color) || null,
-              })]
+              ratingsCache[priceResearchSummaryKey(listingPricePair(selectedListing))]
             }
             onClose={closeListing}
           />
@@ -1094,11 +1106,7 @@ export default function TradingFloor() {
                 : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
               >
                 {visibleListings.map(listing => {
-                  const ratingKey = priceResearchSummaryKey({
-                    brand: listing.brand,
-                    reference: listing.reference || '',
-                    dial: cleanValue(listing.dial_color) || null,
-                  });
+                  const ratingKey = priceResearchSummaryKey(listingPricePair(listing));
                   const benchmark = ratingsCache[ratingKey];
                   return (
                     <ListingCard
@@ -1641,9 +1649,11 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
 
   return (
     <article
+      data-listing-id={listing.id}
       className="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
+      <span className="sr-only" data-listing-id={listing.id}>{listing.id}</span>
       {/* 1. Watch Image — only rendered when a real source URL exists */}
       {cardHasImage && (
         <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
@@ -1758,9 +1768,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       {/* 8. Direct WhatsApp Contact Action */}
       <div className="mt-auto pt-4 flex flex-col gap-2">
         <div className="text-center text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-          {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
-            ? 'LATEST OBSERVED · CHECK AVAILABILITY'
-            : 'CONFIRMED CURRENT'}
+          {listingAvailabilityLabel(listing)}
         </div>
         <button
           type="button"
@@ -1795,9 +1803,11 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   const visibleImageIndex = activeImage < availableImages.length ? activeImage : 0;
   const messageEvidence = listingMessageEvidence(listing);
   const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
-  const postingIdentity = strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name });
+  const postingIdentity = strongestPostingIdentity(listing);
 
-  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
+  const exactPair = listingPricePair(listing);
+  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS'
+    && (!Object.prototype.hasOwnProperty.call(exactPair, 'condition') || (exactPair.dial && exactPair.condition)));
   const [benchmark, setBenchmark] = useState<{
     loading: boolean;
     count: number;
@@ -1838,8 +1848,8 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
       })
       .catch(error => { if (error?.name !== 'AbortError') setContact(sourcePosterContact(listing)); });
     
-    // Fetch seller analytics
-    fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+    // Legacy workbook analytics do not accept V2 source listing identities.
+    if (listing.contract_version !== 'v2.0') fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
         if (!payload || payload.status !== 'ok') return;
@@ -1870,8 +1880,13 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
       const reference = listing.reference as string;
       const params = new URLSearchParams({ reference, brand: listing.brand });
       if (listing.dial_color) params.set('dial', listing.dial_color);
-
-      fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
+      const exactCanary = Object.prototype.hasOwnProperty.call(listingPricePair(listing), 'condition');
+      if (exactCanary) {
+        params.set('condition', listing.condition || '');
+        params.set('dial', listing.dial_color || '');
+        params.set('pageSize', '1');
+      }
+      fetch(`${exactCanary ? '/api/canary/price-research' : '/api/price-research'}?${params.toString()}`, { signal: controller.signal })
         .then(async response => response.ok ? response.json() : null)
         .then(payload => {
           if (!payload) {
@@ -1929,7 +1944,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
     <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
       {/* Top Banner Link */}
       <Link
-        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
+        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}&dial=${encodeURIComponent(listing.dial_color || '')}&condition=${encodeURIComponent(listing.condition || '')}`}
         className="w-full rounded border border-[#E8DECF] bg-[#F6EFE5] py-2 text-center text-xs font-semibold text-[#653E23] transition hover:bg-[#EFE5D8] block"
       >
         Open full price research
@@ -1992,9 +2007,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
             {meta.foreignLabel && <div className="mt-1 text-xs font-medium text-[#7A8699]">{meta.foreignLabel}</div>}
             <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-              {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
-                ? 'LATEST OBSERVED · CHECK AVAILABILITY'
-                : 'CONFIRMED CURRENT'}
+              {listingAvailabilityLabel(listing)}
             </div>
 
             {messageEvidence && (
@@ -2035,7 +2048,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
             <div className="mt-4 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source poster</div>
               {listing.dealer_profile_path && postingIdentity ? (
                 <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
                   {postingIdentity || 'Posting identity requires review'}
@@ -2047,7 +2060,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               )}
               <div className="mt-0.5">
                 <ListingDealerEvidence
-                  sellerName={contact?.dealer_name || listing.seller_name}
+                  sellerName={listing.seller_name}
                   sellerPhone={listing.seller_phone}
                   contactPublicationApproved={listing.contact_publication_approved === true}
                   rating={listing.seller_rating ?? sellerReputation?.rating}
@@ -2069,7 +2082,9 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
-              Direct poster contact is not published. Please help connect me with the poster through a verified channel without displaying a private number.
+              {contact?.contact_available
+                ? 'Contact the verified dealer to confirm this listing and its availability.'
+                : 'A verified, consented contact channel is not available for this listing.'}
             </p>
 
             {contact?.contact_channels?.whatsapp ? <a
@@ -2079,7 +2094,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
             >
               <MessageCircle size={18} />
-              Ask Curated Luxury on WhatsApp
+              Contact dealer on WhatsApp
             </a> : null}
             {contact?.contact_channels?.telegram ? <a
               href={contact.contact_channels.telegram}
@@ -2305,6 +2320,13 @@ function ratingUsdPrice(listing: ListingRecord) {
   return verifiedUsdPrice(listing);
 }
 
+function listingPricePair(listing: ListingRecord): PriceResearchBatchPair {
+  const canary = import.meta.env.VITE_USE_CANARY_V2 === 'true'
+    || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+  return { brand: listing.brand, reference: listing.reference || '', dial: cleanValue(listing.dial_color) || null,
+    ...(canary ? { condition: cleanValue(listing.condition) || null } : {}) };
+}
+
 function reviewedWorkbookUsdPrice(listing: ListingRecord) {
   // Only display the workbook price if the API has NOT flagged it for review.
   // workbook_price_review_reason is set by the API when the price is out of
@@ -2396,8 +2418,8 @@ function listingMessageEvidence(listing: ListingRecord) {
   if (listing.raw_message_scope === 'normalized_summary') {
     return { label: 'SOURCE TEXT', text: 'Unverified workbook summary text is withheld from the customer view.' };
   }
-  const rawMessage = cleanValue(listing.raw_message);
-  if (rawMessage && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
+  const rawMessage = typeof listing.raw_message === 'string' ? listing.raw_message : '';
+  if (rawMessage.trim() && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
   const rawLine = cleanValue(listing.raw_line);
   if (rawLine) return { label: 'SOURCE LISTING LINE', text: rawLine };
   const description = cleanValue(listing.description);

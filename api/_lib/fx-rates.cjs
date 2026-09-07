@@ -14,7 +14,7 @@ const SUPPORTED_CURRENCIES = [
 const RECOGNIZED_WITHHELD_CURRENCIES = ['AED', 'SAR', 'TWD', 'VND'];
 
 async function parseEcbRates(csvText) {
-  const latest = new Map();
+  const observations = new Map();
   await new Promise((resolve, reject) => {
     Readable.from([csvText])
       .pipe(csv())
@@ -22,22 +22,23 @@ async function parseEcbRates(csvText) {
         const currency = String(row.CURRENCY || '').toUpperCase();
         const value = Number(row.OBS_VALUE);
         const date = String(row.TIME_PERIOD || '');
-        if (!SUPPORTED_CURRENCIES.includes(currency) || !Number.isFinite(value) || value <= 0 || !date) return;
-        if (!latest.has(currency) || date > latest.get(currency).date) latest.set(currency, { date, value });
+        if (!SUPPORTED_CURRENCIES.includes(currency) || !Number.isFinite(value) || value <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+        if (!observations.has(currency)) observations.set(currency, new Map());
+        observations.get(currency).set(date, value);
       })
       .on('end', resolve)
       .on('error', reject);
   });
 
-  const usdPerEur = latest.get('USD');
-  if (!usdPerEur) throw new Error('ECB response did not include USD');
-  const rates = { USD: 1, EUR: 1 / usdPerEur.value };
+  const observedAt = [...(observations.get('USD')?.keys() || [])].sort().at(-1);
+  if (!observedAt) throw new Error('ECB response did not include USD');
+  const usdPerEur = observations.get('USD').get(observedAt);
+  const rates = { USD: 1, EUR: 1 / usdPerEur };
   for (const currency of SUPPORTED_CURRENCIES) {
     if (currency === 'USD' || currency === 'EUR') continue;
-    const quote = latest.get(currency);
-    if (quote) rates[currency] = quote.value / usdPerEur.value;
+    const quote = observations.get(currency)?.get(observedAt);
+    if (quote) rates[currency] = quote / usdPerEur;
   }
-  const observedAt = [...latest.values()].map(item => item.date).sort().at(-1) || usdPerEur.date;
   return { observedAt, rates };
 }
 

@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { runReproducibleBackfill } = require('../tools/mariadb-live/reproducible-proposal-hash-backfill.cjs');
+const { capturedFixture } = require('./helpers/captured-fixture.cjs');
+const { normalizeAuthoritativeRow } = require('../tools/mariadb-live/authoritative-evidence-normalizer.cjs');
 
 const env = {
   SUPABASE_URL: 'https://example.supabase.co',
@@ -12,7 +14,7 @@ const env = {
 };
 
 function rawRow(sourceId = 'source-1') {
-  return {
+  const raw = capturedFixture({
     id: sourceId,
     source_system: 'OceanDigital MariaDB',
     source_database: 'thecollective_inventory',
@@ -30,8 +32,29 @@ function rawRow(sourceId = 'source-1') {
       reference: '116500LN'
     },
     captured_at: '2026-08-29T12:00:00.000Z'
-  };
+  });
+  raw.stored_proposal = { ...normalizeAuthoritativeRow(raw), proposal_hash: null };
+  return raw;
 }
+
+test('hash-only backfill refuses different stored facts without issuing a write', async () => {
+  const row = rawRow();
+  row.stored_proposal.original_price_amount = 999;
+  let calls = 0;
+  await assert.rejects(runReproducibleBackfill(env, { callRpc: async (_u, _k, name) => {
+    calls += 1;
+    assert.equal(name, 'get_mariadb_proposals_missing_or_invalid_hash');
+    return [row];
+  } }), /BACKFILL_RENORMALIZATION_REQUIRED/);
+  assert.equal(calls, 1);
+});
+
+test('hash-only backfill requires stored proposal evidence', async () => {
+  const row = rawRow();
+  delete row.stored_proposal;
+  await assert.rejects(runReproducibleBackfill(env, { callRpc: async () => [row] }),
+    /BACKFILL_RENORMALIZATION_REQUIRED/);
+});
 
 test('hash backfill migration selects only missing/invalid hashes and has no insert path', () => {
   const migration = fs.readFileSync(

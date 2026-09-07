@@ -16,8 +16,8 @@ test('listing surfaces show verified channel actions without rendering contact n
   assert.match(trading, /contact_channels\?\.telegram/);
   assert.match(trading, /fetch\(`\/api\/listing-contact\?\$\{contactParams\.toString\(\)\}`/);
   assert.match(trading, /Continue on Telegram/);
-  assert.match(trading, /Ask Curated Luxury on WhatsApp/);
-  assert.match(trading, /Please help connect me with the poster/);
+  assert.match(trading, /Contact dealer on WhatsApp/);
+  assert.match(trading, /A verified, consented contact channel is not available for this listing/);
   assert.doesNotMatch(trading, /Contact phone number not available for this poster/);
   assert.doesNotMatch(trading, /\{contact\?\.phone_display/);
   assert.doesNotMatch(trading, /Contact:\s*\{publishedPhone\}/);

@@ -1,4 +1,7 @@
 const { getClient } = require('./_lib/supabase');
+const { trustedClientAddress: contactRequestKey } = require('./_lib/trusted-client-address.cjs');
+const { createHmac } = require('node:crypto');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
@@ -22,6 +25,119 @@ function normalizeTelegramUsername(value) {
     .replace(/^@/, '')
     .split(/[/?#]/, 1)[0];
   return /^[A-Za-z0-9_]{5,32}$/.test(candidate) ? candidate : null;
+}
+
+/**
+ * Phase 8 — dealer/contact security controls.
+ *
+ * The contact endpoint resolves phone/WhatsApp server-side ONLY after the
+ * listing-to-dealer linkage and the contact-consent gate succeed. These
+ * controls add: (a) bounded per-client rate limiting, (b) structured audit
+ * events that never contain phones or raw payloads, and (c) a strict
+ * response-field allowlist so a phone can never leak through a stray field.
+ */
+const CONTACT_RATE_WINDOW_MS = 10 * 60 * 1000;
+const CONTACT_RATE_LIMIT = 30;
+const CONTACT_MAX_CLIENTS = 10000;
+const contactAttempts = new Map();
+
+function contactRateLimited(req, now = Date.now()) {
+  const key = contactRequestKey(req);
+  let current = contactAttempts.get(key);
+  if (current && current.resetAt <= now) {
+    contactAttempts.delete(key);
+    current = null;
+  }
+  if (!current) {
+    if (contactAttempts.size >= CONTACT_MAX_CLIENTS) {
+      for (const [client, attempt] of contactAttempts) {
+        if (attempt.resetAt <= now) contactAttempts.delete(client);
+      }
+      // Never evict an active client's counter to admit a new identity.
+      if (contactAttempts.size >= CONTACT_MAX_CLIENTS) return true;
+    }
+    current = { count: 0, resetAt: now + CONTACT_RATE_WINDOW_MS };
+  }
+  current.count = Math.min(current.count + 1, CONTACT_RATE_LIMIT + 1);
+  contactAttempts.set(key, current);
+  return current.count > CONTACT_RATE_LIMIT;
+}
+
+function resetContactRateLimitForTests() {
+  contactAttempts.clear();
+}
+
+async function sharedContactBudget(client, req) {
+  const secret = process.env.CONTACT_RATE_LIMIT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+  if (!secret) {
+    const error = new Error('Service temporarily unavailable');
+    error.statusCode = 503;
+    throw error;
+  }
+  const bucket = createHmac('sha256', secret).update('listing-contact-v1:').update(contactRequestKey(req)).digest('hex');
+  const { data, error } = await client.rpc('consume_listing_contact_budget', { p_bucket_hash: bucket });
+  if (error || typeof data !== 'boolean') {
+    const unavailable = new Error('Service temporarily unavailable');
+    unavailable.statusCode = 503;
+    throw unavailable;
+  }
+  return data;
+}
+
+/**
+ * Response-field allowlist. Anything not listed is stripped before the JSON
+ * body is sent, so seller_phone / raw payloads / internal ids cannot leak
+ * through future refactors.
+ */
+const CONTACT_RESPONSE_FIELDS = new Set([
+  'success',
+  'contact_available',
+  'reason',
+  'dealer_id',
+  'dealer_name',
+  'dealer_company',
+  'dealer_country',
+  'dealer_city',
+  'dealer_avatar_url',
+  'dealer_profile_summary',
+  'dealer_profile_url',
+  'dealer_rating',
+  'dealer_review_count',
+  'dealer_group_count',
+  'dealer_stats',
+  'contact_source',
+  'contact_channels',
+]);
+
+function allowlistContactPayload(payload) {
+  const safe = {};
+  for (const [key, value] of Object.entries(payload || {})) {
+    if (CONTACT_RESPONSE_FIELDS.has(key)) safe[key] = value;
+  }
+  return safe;
+}
+
+let contactAuditSink = null;
+function setContactAuditSink(sink) {
+  contactAuditSink = typeof sink === 'function' ? sink : null;
+}
+
+/**
+ * Structured audit event. Deliberately excludes phones, raw messages, and
+ * request bodies — only the listing id, surface, channel, and outcome.
+ */
+function emitContactAudit(event, detail = {}) {
+  const safe = {
+    event: String(event),
+    listing_id: detail.listing_id ? String(detail.listing_id) : null,
+    surface: detail.surface ? String(detail.surface) : null,
+    channel: detail.channel ? String(detail.channel) : null,
+    result: detail.result ? String(detail.result) : null,
+  };
+  if (contactAuditSink) {
+    try { contactAuditSink(safe); } catch { /* audit sink must never break the request */ }
+  }
+  console.info('[listing-contact][audit]', JSON.stringify(safe));
 }
 
 function hasApprovedPublicContact(listing) {
@@ -66,11 +182,17 @@ async function findQnsaReleasedListing(client, { id, brand, reference, maximumPa
 }
 
 function whatsappUrl(phone, listing) {
-  const item = [listing.brand, listing.reference].filter(Boolean).join(' ');
+  // Prefilled text is restricted to public listing facts only
+  // (brand / model / reference / dial / displayed price / listing id).
+  // It never carries seller identity, phone numbers, or private notes.
+  const item = [listing.brand, listing.model, listing.reference].filter(Boolean).join(' ');
+  const dial = listing.dial_color ? `, ${listing.dial_color} dial` : '';
+  const price = listing.display_price ? ` listed at ${listing.display_price}` : '';
+  const listingRef = listing.id ? ` (listing ${listing.id})` : '';
   const isBuyerRequest = ['WTB', 'NTQ'].includes(String(listing.listing_type || '').toUpperCase());
   const message = encodeURIComponent(isBuyerRequest
-    ? `Hello, I may be able to help with your request for ${item || 'this luxury item'} shown on Curated Luxury. Are you still looking?`
-    : `Hello, I am interested in the ${item || 'luxury listing'} shown on Curated Luxury. Is it still available?`);
+    ? `Hello, I may be able to help with your request for ${item || 'this luxury item'}${dial}${price} shown on Curated Luxury${listingRef}. Are you still looking?`
+    : `Hello, I am interested in the ${item || 'luxury listing'}${dial}${price} shown on Curated Luxury${listingRef}. Is it still available?`);
   return `https://wa.me/${phone}?text=${message}`;
 }
 
@@ -85,7 +207,12 @@ function sendContactResult(res, {
 }) {
   if (requestedChannel) {
     const destination = externalChannels[requestedChannel];
-    if (!destination) return res.status(404).json({ error: 'Requested contact channel unavailable' });
+    if (!destination) {
+      emitContactAudit('CONTACT_CHANNEL_UNAVAILABLE', { listing_id: id, surface, channel: requestedChannel, result: 'NOT_FOUND' });
+      return res.status(404).json({ error: 'Requested contact channel unavailable' });
+    }
+    // Phone resolution happens only here, server-side, after every gate above.
+    emitContactAudit('CONTACT_RESOLVED', { listing_id: id, surface, channel: requestedChannel, result: 'REDIRECT' });
     res.setHeader('Location', destination);
     return res.status(302).end();
   }
@@ -94,7 +221,13 @@ function sendContactResult(res, {
     channel,
     `/api/listing-contact?id=${encodeURIComponent(id)}&surface=${encodeURIComponent(surface)}${context}&channel=${channel}`,
   ]));
-  return res.status(200).json({ ...payload, contact_channels: contactChannels });
+  emitContactAudit('CONTACT_RESOLVED', {
+    listing_id: id,
+    surface,
+    channel: Object.keys(externalChannels).join(',') || null,
+    result: payload?.contact_available ? 'AVAILABLE' : 'UNAVAILABLE',
+  });
+  return res.status(200).json({ ...allowlistContactPayload(payload), contact_channels: contactChannels });
 }
 
 async function ownerApprovedContactStats(client, sellerPhone) {
@@ -150,6 +283,11 @@ async function ownerApprovedContactStats(client, sellerPhone) {
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (contactRateLimited(req)) {
+    emitContactAudit('CONTACT_RATE_LIMITED', { result: 'RATE_LIMITED' });
+    res.setHeader('Retry-After', String(Math.ceil(CONTACT_RATE_WINDOW_MS / 1000)));
+    return res.status(429).json({ error: 'Too many contact requests. Try again later.' });
+  }
   const id = String(req.query?.id || '').trim();
   if (!id || id.length > 250) return res.status(400).json({ error: 'Valid listing id required' });
   const surface = String(req.query?.surface || 'trading-floor').trim().toLowerCase();
@@ -165,6 +303,24 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (!await sharedContactBudget(client, req)) {
+      emitContactAudit('CONTACT_RATE_LIMITED', { result: 'RATE_LIMITED' });
+      res.setHeader('Retry-After', '600');
+      return res.status(429).json({ error: 'Too many contact requests. Try again later.' });
+    }
+    if (process.env.VITE_USE_CANARY_V2 === 'true') {
+      const { data, error } = await client.rpc('get_v2_listing_contact', { p_listing_id: id, p_surface: surface });
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: 'Listing not found' });
+      const phone = data.contact_available === true ? normalizePhone(data.contact_phone) : null;
+      const safe = allowlistContactPayload(data);
+      if (typeof safe.dealer_name === 'string') safe.dealer_name = redactPublicSource(safe.dealer_name);
+      return sendContactResult(res, {
+        payload: { ...safe, success: true, contact_available: Boolean(phone) },
+        externalChannels: phone ? { whatsapp: whatsappUrl(phone, { brand: data.brand, reference: data.reference, listing_type: data.intent }) } : {},
+        id, surface, requestedChannel, brand: data.brand, reference: data.reference,
+      });
+    }
     const publicTable = surface === 'price-research'
       ? 'price_research_verified_source'
       : 'trading_floor_verified_listings';
@@ -340,6 +496,7 @@ module.exports = async function handler(req, res) {
       lineage = lineageResult.data;
     }
     if (!lineage) {
+      emitContactAudit('CONTACT_DENIED', { listing_id: id, surface, result: 'SELLER_LINEAGE_UNVERIFIED' });
       return res.status(200).json({ success: true, contact_available: false, reason: 'SELLER_LINEAGE_UNVERIFIED' });
     }
 
@@ -367,7 +524,8 @@ module.exports = async function handler(req, res) {
       dealer_stats: null,
     };
     if (dealer.contact_consent !== true) {
-      return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_CONSENT_NOT_GRANTED', ...profile });
+      emitContactAudit('CONTACT_DENIED', { listing_id: id, surface, result: 'CONTACT_CONSENT_NOT_GRANTED' });
+      return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_CONSENT_NOT_GRANTED', ...allowlistContactPayload(profile) });
     }
 
     const { data: identities, error: identityError } = await client
@@ -381,7 +539,7 @@ module.exports = async function handler(req, res) {
       .filter(item => String(item.identity_type || '').toUpperCase() === 'TELEGRAM')
       .map(item => normalizeTelegramUsername(item.source_identity))
       .find(Boolean);
-    if (!phone && !telegram) return res.status(200).json({ success: true, contact_available: false, reason: 'VERIFIED_CONTACT_UNAVAILABLE', ...profile });
+    if (!phone && !telegram) return res.status(200).json({ success: true, contact_available: false, reason: 'VERIFIED_CONTACT_UNAVAILABLE', ...allowlistContactPayload(profile) });
 
     return sendContactResult(res, {
       payload: { success: true, contact_available: true, ...profile },
@@ -396,8 +554,8 @@ module.exports = async function handler(req, res) {
       reference: resolvedListing.reference,
     });
   } catch (error) {
-    console.error('[listing-contact]', error.message);
-    return res.status(500).json({ error: 'Unable to verify dealer contact' });
+    console.error('[listing-contact] request failed');
+    return res.status(error.statusCode === 503 ? 503 : 500).json({ error: 'Unable to verify dealer contact' });
   }
 };
 
@@ -406,3 +564,12 @@ module.exports.optionalLegacyPublicListingUnavailable = optionalLegacyPublicList
 module.exports.findQnsaReleasedListing = findQnsaReleasedListing;
 module.exports.normalizeTelegramUsername = normalizeTelegramUsername;
 module.exports.sendContactResult = sendContactResult;
+module.exports.whatsappUrl = whatsappUrl;
+module.exports.CONTACT_RESPONSE_FIELDS = CONTACT_RESPONSE_FIELDS;
+module.exports.allowlistContactPayload = allowlistContactPayload;
+module.exports.contactRateLimited = contactRateLimited;
+module.exports.contactRequestKey = contactRequestKey;
+module.exports.sharedContactBudget = sharedContactBudget;
+module.exports.resetContactRateLimitForTests = resetContactRateLimitForTests;
+module.exports.setContactAuditSink = setContactAuditSink;
+module.exports.emitContactAudit = emitContactAudit;

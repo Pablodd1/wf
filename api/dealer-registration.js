@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { authClient } = require('./_lib/dealer-auth.cjs');
 
 const attempts = new Map();
+const {trustedClientAddress:requestKey}=require('./_lib/trusted-client-address.cjs');
 const ACCOUNT_TYPES = new Set(['individual', 'dealer', 'company', 'broker']);
 const LANGUAGES = new Set(['en', 'es', 'pt', 'zh']);
 
@@ -15,17 +16,17 @@ function clean(value, max = 200) {
 function sameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const host = req.headers.host;
   try { return new URL(origin).host === host; } catch { return false; }
-}
-
-function requestKey(req) {
-  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim();
 }
 
 function rateLimited(req) {
   const now = Date.now();
   const key = requestKey(req);
+  if(!attempts.has(key) && attempts.size>=10000){
+    for(const [address,attempt] of attempts)if(attempt.resetAt<=now)attempts.delete(address);
+    if(attempts.size>=10000)return true;
+  }
   const current = attempts.get(key) || { count: 0, resetAt: now + 30 * 60 * 1000 };
   if (current.resetAt <= now) {
     attempts.set(key, { count: 1, resetAt: now + 30 * 60 * 1000 });
@@ -90,7 +91,7 @@ module.exports = async function handler(req, res) {
     imported_at: new Date().toISOString(),
   }, { onConflict: 'source_system,source_id' });
   if (error) {
-    console.error('[dealer-registration]', error.message);
+    console.error('[dealer-registration]', error.code || 'APPLICATION_SAVE_FAILED');
     return res.status(500).json({ error: 'Unable to save the dealer application.' });
   }
   return res.status(202).json({ success: true, status: 'PENDING_VERIFICATION', application_id: sourceId.slice(0, 12) });

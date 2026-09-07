@@ -61,7 +61,7 @@ test('listing evidence preserves raw message and seller facts while suppressing 
 });
 
 test('WTB demand stays visibly separate from WTS asking-price analytics and contact actions remain', () => {
-  assert.match(source, /Strictly separated from WTS asking-price averages/);
+  assert.match(source, /Requests remain separate from WTS asking-price averages/);
   assert.match(source, /Demand Signals \(WTB\)/);
   assert.match(source, /Qualified observations power the chart and statistics/);
   assert.match(source, /Contact on WhatsApp/);

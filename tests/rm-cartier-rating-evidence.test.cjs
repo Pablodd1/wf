@@ -26,13 +26,13 @@ function reviewedRow(overrides = {}) {
   };
 }
 
-test('Cartier exact-phone feedback evidence is rated without inventing a numeric score', () => {
+test('Cartier source phone alone cannot promote static feedback into an approved rating', () => {
   const record = inventory.mapReviewedRecord(reviewedRow());
   assert.equal(record.seller_rating, null);
-  assert.equal(record.seller_review_count, 18);
-  assert.equal(record.seller_rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
-  assert.equal(inventory.ratingMatches(record, 'rated'), true);
-  assert.equal(inventory.ratingMatches(record, 'unrated'), false);
+  assert.equal(record.seller_review_count, 0);
+  assert.equal(record.seller_rating_evidence_status, 'UNAVAILABLE');
+  assert.equal(inventory.ratingMatches(record, 'rated'), false);
+  assert.equal(inventory.ratingMatches(record, 'unrated'), true);
 });
 
 test('Richard Mille without exact rating evidence stays visibly unrated', () => {

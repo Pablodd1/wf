@@ -19,8 +19,8 @@ test('every Trading Floor card keeps mandatory evidence areas visible', () => {
   assert.match(dealer, />Not rated<\/span>/);
   assert.match(card, /customerIntentLabel\(listing\.listing_type\)/);
   assert.match(floor, /Original message requires review/);
-  assert.match(card, /LATEST OBSERVED · CHECK AVAILABILITY/);
-  assert.match(card, /CONFIRMED CURRENT/);
+  assert.match(card, /listingAvailabilityLabel\(listing\)/);
+  // Missing/partial availability is exercised by listing-availability-evidence.test.cjs.
 });
 
 test('mandatory fallbacks never fabricate evidence', () => {

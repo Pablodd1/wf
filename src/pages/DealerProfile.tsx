@@ -16,6 +16,7 @@ interface ProfilePayload {
   reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
   groups?: Array<{ name: string | null; platform: string | null; membership_status: string | null }>;
   listing_total?: number;
+  next_cursor?: string | null;
   source_provenance?: { source_system: string; crawled_at: string | null; captured_listing_count?: number; captured_review_count?: number };
   dynamic_activity_status?: string;
   listing_linkage_status?: string;
@@ -25,15 +26,34 @@ interface ProfilePayload {
 
 export default function DealerProfile() {
   const { dealerId = '' } = useParams();
+  return <DealerProfileContent key={dealerId} dealerId={dealerId} />;
+}
+
+function DealerProfileContent({ dealerId }: { dealerId: string }) {
   const [payload, setPayload] = useState<ProfilePayload | null>(null);
   const [error, setError] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState('');
+
+  async function loadMore() {
+    if (!payload?.next_cursor || loadingMore) return;
+    setLoadingMore(true);
+    setPageError('');
+    try {
+      const response = await fetch(`/api/dealer-profile?id=${encodeURIComponent(dealerId)}&cursor=${encodeURIComponent(payload.next_cursor)}`, { credentials: 'include' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Unable to load more activity');
+      setPayload(current => current ? { ...body, listings: [...current.listings, ...body.listings] } : body);
+    } catch (caught) { setPageError(caught instanceof Error ? caught.message : 'Unable to load more activity'); }
+    finally { setLoadingMore(false); }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/dealer-profile?id=${encodeURIComponent(dealerId)}`, { credentials: 'include', signal: controller.signal })
       .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Unable to load profile'); return body; })
-      .then(setPayload)
-      .catch(caught => { if (caught?.name !== 'AbortError') setError(caught.message); });
+      .then(body => { if (!controller.signal.aborted) setPayload(body); })
+      .catch(caught => { if (!controller.signal.aborted) setError(caught.message); });
     return () => controller.abort();
   }, [dealerId]);
 
@@ -93,7 +113,7 @@ export default function DealerProfile() {
 
       <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="grid gap-px bg-white/10 sm:grid-cols-3">
-          <ProfileMetric label="Total listings posted ever" value={linkagePending ? 'Pending linkage' : count(payload.listing_total ?? ((stats?.wts_count != null || stats?.wtb_count != null) ? (stats?.wts_count || 0) + (stats?.wtb_count || 0) : null))} />
+          <ProfileMetric label="Published linked listings" value={linkagePending ? 'Pending linkage' : count(payload.listing_total ?? ((stats?.wts_count != null || stats?.wtb_count != null) ? (stats?.wts_count || 0) + (stats?.wtb_count || 0) : null))} />
           <ProfileMetric label="For sale posts" value={linkagePending ? 'Pending linkage' : count(stats?.wts_count)} />
           <ProfileMetric label="Want to buy posts" value={linkagePending ? 'Pending linkage' : count(stats?.wtb_count)} />
         </div>
@@ -110,7 +130,7 @@ export default function DealerProfile() {
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <h2 className="text-xl font-semibold">Recent market activity</h2>
-          <span className="text-xs text-white/35">{Number(payload.listing_total ?? listings.length).toLocaleString()} {isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified linked posts'}</span>
+          <span className="text-xs text-white/35">{linkagePending ? 'Linkage pending' : `${Number(payload.listing_total ?? listings.length).toLocaleString()} ${isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified linked posts'}`}</span>
         </div>
         <div className="divide-y divide-white/10">
           {listings.map(listing => (
@@ -136,6 +156,8 @@ export default function DealerProfile() {
             </article>
           ))}
         </div>
+        {payload.next_cursor && <button type="button" disabled={loadingMore} onClick={loadMore} className="mt-5 border border-white/15 px-4 py-2 text-xs disabled:opacity-35">{loadingMore ? 'Loading activity...' : 'Load more activity'}</button>}
+        {pageError && <p role="alert" className="mt-3 text-sm text-amber-200">{pageError}</p>}
         {payload.reviews && payload.reviews.length > 0 && <section className="mt-12">
           <div className="flex items-center justify-between border-b border-white/10 pb-4"><h2 className="text-xl font-semibold">Dealer feedback</h2><span className="text-xs text-white/35">{payload.reviews.length} captured entries</span></div>
           <div className="grid gap-px bg-white/10 md:grid-cols-2">

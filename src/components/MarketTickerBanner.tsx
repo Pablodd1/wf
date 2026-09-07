@@ -1,18 +1,37 @@
+import { useEffect, useState } from 'react';
+import { marketTickerItems } from '../lib/marketTicker';
+
 export function MarketTickerBanner() {
-  const tickerItems = [
-    { model: 'Rolex Daytona 116500LN', price: '$28,500 USD', status: 'WTS' },
-    { model: 'Patek Philippe Nautilus 5712/1A', price: '$115,000 USD', status: 'WTB' },
-    { model: 'Audemars Piguet Royal Oak 15500ST', price: '$36,200 USD', status: 'WTS' },
-    { model: 'Richard Mille RM35-02 Rafael Nadal', price: '$340,000 USD', status: 'WTS' },
-    { model: 'Vacheron Constantin Overseas 4500V', price: '$24,800 USD', status: 'WTS' },
-    { model: 'Cartier Santos WSSA0018', price: '$6,850 USD', status: 'WTS' },
-    { model: 'Omega Speedmaster Professional 310.30', price: '$6,200 USD', status: 'WTS' },
-    { model: 'TAG Heuer Monaco Calibre 11', price: '$5,400 USD', status: 'WTB' },
-    { model: 'Breguet Type XX Flyback', price: '$8,900 USD', status: 'WTS' },
-    { model: 'Hublot Big Bang Unico Titanium', price: '$14,200 USD', status: 'WTS' },
-    { model: 'A. Lange & Söhne Lange 1 Rose Gold', price: '$32,500 USD', status: 'WTS' },
-    { model: 'F.P. Journe Chronomètre Bleu', price: '$78,000 USD', status: 'WTB' },
-  ];
+  const [tickerItems, setTickerItems] = useState<ReturnType<typeof marketTickerItems>>([]);
+  const [state, setState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true'
+    || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+  useEffect(() => {
+    let active = true;
+    let controller: AbortController;
+    const load = async () => {
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      try {
+        const endpoint = canaryEnabled ? '/api/canary/trading-floor' : '/api/reviewed-market-inventory';
+        const response = await fetch(`${endpoint}?pageSize=12&pagination=cursor`, { signal });
+        if (!response.ok) throw new Error('Market observations unavailable');
+        const body = await response.json();
+        if (body.status !== 'ok' || !Array.isArray(body.records)) throw new Error('Invalid market observations');
+        if (!active || signal.aborted) return;
+        setTickerItems(marketTickerItems(body.records));
+        setState('ready');
+      } catch {
+        if (!active || signal.aborted) return;
+        setTickerItems([]);
+        setState('unavailable');
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 90_000);
+    return () => { active = false; controller?.abort(); window.clearInterval(timer); };
+  }, [canaryEnabled]);
 
   return (
     <div className="w-full bg-[#12100E] border-b border-[#3F3324]/30 overflow-hidden text-xs py-2 text-[#D4B87A] flex items-center shadow-inner relative z-30">
@@ -35,10 +54,11 @@ export function MarketTickerBanner() {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
         </span>
-        LIVE MARKET TICKER
+        {import.meta.env.VITE_DISPOSABLE_PREVIEW === 'true' ? 'PREVIEW OBSERVATIONS' : 'MARKET OBSERVATIONS'}
       </div>
       <div className="relative flex-1 overflow-hidden">
         <div className="ticker-marquee-track flex items-center gap-8 font-mono text-[11px] font-medium">
+          {tickerItems.length === 0 && <span>{state === 'loading' ? 'Loading market observations…' : state === 'unavailable' ? 'Market observations unavailable' : 'No published observations'}</span>}
           {tickerItems.concat(tickerItems).concat(tickerItems).map((item, idx) => (
             <div key={idx} className="flex items-center gap-2 shrink-0">
               <span className="text-[#F3ECDF] font-sans font-medium">{item.model}</span>

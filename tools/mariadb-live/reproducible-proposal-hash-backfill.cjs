@@ -15,8 +15,7 @@ async function callRpc(supabaseUrl, supabaseKey, rpcName, body) {
     body: JSON.stringify(body)
   });
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error('RPC ' + rpcName + ' failed (' + res.status + '): ' + txt);
+    throw new Error('Backfill RPC failed (' + res.status + ')');
   }
   return await res.json();
 }
@@ -49,8 +48,14 @@ async function runReproducibleBackfill(env = process.env, dependencies = {}) {
 
     const hashesToBackfill = batch.map(r => {
       const p = normalizeAuthoritativeRow(r);
+      // A hash-only repair cannot silently upgrade the stored parser or facts.
+      // The database also compares the entire selected row under a write lock.
+      const stored = r.stored_proposal;
+      if (!stored || computeProposalHash(stored) !== p.proposal_hash) {
+        throw new Error('BACKFILL_RENORMALIZATION_REQUIRED');
+      }
       if (!/^[0-9a-f]{64}$/.test(p.proposal_hash || '')) {
-        throw new Error('Normalization generated invalid hash for source_id ' + r.source_id);
+        throw new Error('BACKFILL_INVALID_GENERATED_HASH');
       }
       return {
         source_system: p.source_system,
@@ -58,7 +63,8 @@ async function runReproducibleBackfill(env = process.env, dependencies = {}) {
         source_table: p.source_table,
         source_id: p.source_id,
         source_hash: p.source_hash,
-        proposal_hash: p.proposal_hash
+        proposal_hash: p.proposal_hash,
+        expected_stored_proposal: stored
       };
     });
 

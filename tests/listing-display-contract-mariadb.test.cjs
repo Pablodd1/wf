@@ -3,7 +3,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildListingDisplayContract } = require('../tools/mariadb-live/listing-display-contract.cjs');
+const { buildListingDisplayContract: productionNormalize } = require('../tools/mariadb-live/listing-display-contract.cjs');
+const { capturedFixture } = require('./helpers/captured-fixture.cjs');
+const buildListingDisplayContract = (row, options) => productionNormalize(capturedFixture(row), options);
 
 test('1. provenance requirement - throws if source_id or source_hash missing', () => {
   assert.throws(() => {
@@ -11,22 +13,23 @@ test('1. provenance requirement - throws if source_id or source_hash missing', (
   }, /Provenance assertion failed/);
 });
 
-test('2. DigitalOcean spaces image key resolution and NO_IMAGE for bundles', () => {
+test('2. DigitalOcean spaces image key resolution and PARENT_ATTACHMENT_UNASSIGNED_TO_CHILD for bundles', () => {
   const single = buildListingDisplayContract({
     source_id: 'img-1',
     source_hash: '1'.repeat(64),
     raw_payload: { front_image: 'dial_front.jpg', is_bundle: 0 }
   });
-  assert.equal(single.image_evidence_type, 'SOURCE_LISTING_IMAGE');
-  assert.equal(single.image_url, 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/dial_front.jpg');
+  assert.equal(single.image_evidence_type, 'SOURCE_LINKED_IMAGE');
+  assert.equal(single.image_url, 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/dial_front.jpg');
 
   const bundle = buildListingDisplayContract({
     source_id: 'bundle-img',
     source_hash: '2'.repeat(64),
     raw_payload: { is_bundle: 1, front_image: 'bundle.jpg' }
   });
-  assert.equal(bundle.image_evidence_type, 'NO_IMAGE');
+  assert.equal(bundle.image_evidence_type, 'PARENT_ATTACHMENT_UNASSIGNED_TO_CHILD');
 });
+
 
 test('3. USDT is never treated as USD parity and held for FX', () => {
   const row = buildListingDisplayContract({
