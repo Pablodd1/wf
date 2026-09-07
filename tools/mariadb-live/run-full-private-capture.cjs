@@ -15,6 +15,7 @@ const {
   sha256,
   stableJson,
   computeManifestHash,
+  assertCaptureCheckpointReconciled,
   canonicalizeRawPayload,
   parseMaxCaptureRows,
   checkPinnedServerIdentity,
@@ -182,6 +183,7 @@ async function runCaptureLoop(options = {}) {
 
   console.log(`2. Reading checkpoint state for runKey '${runKey}' via RPC (fail-closed)...`);
   const existingCheckpoint = await fetchCheckpointState(supabase, runKey);
+  assertCaptureCheckpointReconciled(existingCheckpoint);
 
   // 3. Connect to MariaDB with Pinned Certificate Transport
   console.log('3. Connecting to MariaDB with pinned TLS and establishing consistent snapshot...');

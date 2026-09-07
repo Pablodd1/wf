@@ -1,5 +1,72 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-07 00:17 UTC. The owner confirmed proceeding from
+the observed `a8245646` deployment and expanded scope to real luxury singles.
+The prior deployment-identity hold below is resolved. Production read-only
+discovery is now complete enough to establish a different release blocker:
+the frozen historical source count cannot be reconciled from its terminal
+checkpoint. No production database/source mutations or deployments were made.
+
+The manifest hash `fd545df7a5668c28ede4f2c721a9539fcb6f7cf755302a975052b23270b8adb1`
+was recomputed successfully. Its 2026-08-29 snapshot contains 1,495,803 inputs.
+The committed capture accounts for 1,487,325 staged rows plus eight retained
+errors, leaving **8,470 unexplained inputs**. Its cursor already equals the
+frozen upper boundary. The same endpoint row now has source `created_on` and
+`updated_on` of 2026-09-04 13:14:07; the manifest recorded 2026-08-29 14:42:32.
+The current source contains 1,483,003 rows inside the old cursor boundary and
+zero null cursor dates. CA and certificate pin checks pass; the actual source
+engine is MySQL 5.7.42, session/system timezone UTC. This demonstrates mutable
+cursor data, not proof of how every missing row was lost. The available
+category recovery log does not contain original payloads or historical dates.
+Do not reset the checkpoint, reduce the frozen count, or relabel it complete.
+Master sections 12.9 and 14 require holding production writes until historical
+recovery evidence resolves the discrepancy. Historical source backup/snapshot
+or binlog access is required; source SQL access itself works.
+
+The capture runner now checks signed checkpoint accounting before opening a
+source connection. A terminal cursor with a short count fails immediately,
+including a falsely finalized checkpoint. Corrupt counters, unsigned manifests,
+invalid dates and a cursor past the boundary also fail. Sixteen focused tests
+pass, including the measured 8,470-row case; applying the pure guard to the
+captured production checkpoint reproduces the expected refusal without writes.
+This is a prevention fix, not recovery of missing rows or proof that all
+interior source rows stayed unchanged. No UI or migration files were changed.
+
+Verified destination: Supabase `bptrvfncppbjnchsaxtb`, dashboard name `WFtest`,
+Ai Dynamic Pro organization, Medium compute (4 GB RAM/two cores). Seven physical
+daily backups are listed from August 31 through September 6; the latest is
+2026-09-06 10:05:25 UTC. PITR is not enabled. No restore or add-on was requested.
+The dashboard reports 76.70 GB used of 90 GB and 87% disk usage; these rounded
+figures differ from PostgreSQL's byte units. Full-population storage growth,
+runtime, and any autoscale cost remain to be qualified before writes. The
+destination backups do not prove recovery of source rows never captured.
+
+Production has 63 migration-ledger entries and later objects outside that
+ledger, so it must receive reviewed missing-only forward changes. The existing
+V2 publication table contains 500 records, including 67 bundles; this is not
+proof of the requested real RC50 gate. The authoritative raw table and legacy
+normalized proposal table each contain 1,487,325 records, but legacy eligibility
+flags are not v11 qualification. The public dealer table is empty. Private
+directory staging has 45 authenticated directory profiles and 1,580 company-ID
+entries, all pending; only three profiles have both positive rating and review
+count, and none has an avatar. Two unique normalized-phone matches were found
+among 3,084 private identities; these are candidates, not verified consent or
+public identity links. Existing 16,094 MATCH_READY lineage records also require
+review before application. Preserve names, ratings and contact evidence without
+promoting company IDs or ambiguous matches into invented dealers.
+
+Pending: historical recovery/reconciliation, qualification of non-watch luxury
+singles across the v11 watch-only pipeline, genuine dealer evidence and card
+icons, reviewed forward production migrations and rollback, real 50 canary,
+complete eligible population, final exact deployment and live verification.
+Bundles remain held under the owner's current scope. Full-suite results below
+belong to the previously tested application candidate; this continuation ran
+the focused 16-test capture regression set, syntax checks and diff validation.
+Sanitized operational evidence is retained in the task workspace under
+`outputs/source-recovery-release-gate.json` and its referenced reports.
+
+## Historical checkpoint — superseded by the continuation above
+
 Latest continuation: 2026-09-06 23:33 UTC. Production writes are paused under
 master section 12.9 because read-only discovery confirmed an unrecorded change
 to the live deployment. Project `wf` now serves
