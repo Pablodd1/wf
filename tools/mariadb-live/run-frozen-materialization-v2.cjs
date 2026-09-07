@@ -5,13 +5,16 @@ const crypto=require('node:crypto');
 const {createRpc}=require('./run-frozen-normalization-v2.cjs');
 const {captureSourceImageEvidence}=require('./source-image-evidence-v2.cjs');
 
-async function run({rpc,jobName,batchSize=20,maxBatches=Infinity,onProgress=()=>{},captureImage=captureSourceImageEvidence,disposableBase}) {
+async function run({rpc,jobName,batchSize=20,maxBatches=Infinity,onProgress=()=>{},captureImage=captureSourceImageEvidence,disposableBase,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}) {
  if(!jobName||!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>500) throw new Error('INVALID_MATERIALIZATION_WORKER_CONFIG');
  for(let batch=0;batch<maxBatches;batch++) {
   const next=await rpc('read_materialization_workflow_batch_v2',{p_job_name:jobName,p_limit:batchSize});
   if(!next||!Array.isArray(next.members)||!next.job) throw new Error('INVALID_MATERIALIZATION_BATCH_RESPONSE');
   if(next.job.complete){onProgress(next.job);return next.job;}
-  if(!next.members.length) throw new Error('MATERIALIZATION_CHECKPOINT_UNRECONCILED');
+  if(!next.members.length){
+   if(next.waiting_for_normalization===true){onProgress({...next.job,waiting_for_normalization:true});await wait(5000);continue;}
+   throw new Error('MATERIALIZATION_CHECKPOINT_UNRECONCILED');
+  }
   const prepared=new Array(next.members.length);let index=0;
   // Four bounded probes at a time; source evidence never leaves this private
   // process except the reviewed fixed-origin image requests and receipt RPC.
