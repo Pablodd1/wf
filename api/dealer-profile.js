@@ -61,8 +61,18 @@ function sanitizeDealerListing(listing) {
 function sanitizeDealerProfile(profile) {
   const groups = Array.isArray(profile?.groups) ? profile.groups : [];
   const groupCount = Number(profile?.stats?.group_count ?? profile?.dealer?.whatsapp_group_count ?? 0);
+  const contact = profile?.stats?.verified_contact_info;
+  const contactAvailable = profile?.dealer?.source_system === 'WATCHFACTS_VERIFIED_DEALERS'
+    && profile?.listing_linkage_status === 'EXACT_PUBLISHED_SOURCE_LINKAGE'
+    && Number(profile?.listing_total) > 0
+    && contact?.verification_status === 'VERIFIED'
+    && /^\+?[1-9]\d{7,14}$/.test(contact.phone || '');
   return {
     ...profile,
+    stats: profile?.stats ? {
+      ...profile.stats, verified_contact_info: null,
+      contact_action: contactAvailable ? `/api/dealer-contact?id=${encodeURIComponent(profile.dealer.id)}&channel=whatsapp` : null,
+    } : null,
     listings: Array.isArray(profile?.listings)
       ? profile.listings.map(sanitizeDealerListing)
       : [],

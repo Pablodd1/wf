@@ -11,7 +11,7 @@ interface ProfilePayload {
     rating: number | null; review_count: number | null; whatsapp_group_count: number | null; avatar_url: string | null; profile_summary: string | null;
     source_system?: string; source_rank?: number; member_since?: string | null; trust_status?: string | null;
   };
-  stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; current_counts_are_dynamic?: boolean; current_counts_scope?: string; captured_inventory_count?: number; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
+  stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: null; contact_action?: string | null; current_counts_are_dynamic?: boolean; current_counts_scope?: string; captured_inventory_count?: number; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; display_price?: string | null; listing_type: string; listing_date: string | null; created_at: string | null; raw_message?: string; image_url?: string | null; evidence_only?: boolean; identity_review_required?: boolean; identity_review_reason?: string | null; price_review_required?: boolean; price_review_reason?: string | null }>;
   reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
   groups?: Array<{ name: string | null; platform: string | null; membership_status: string | null }>;
@@ -122,8 +122,8 @@ function DealerProfileContent({ dealerId }: { dealerId: string }) {
         {linkagePending && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">WTS, WTB, listing totals, and first/latest post dates are awaiting exact verified seller-to-listing linkage. Missing linkage is not displayed as zero activity.</p>}
         {sourceCandidateUnlinked && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">Counts shown are exact MariaDB source activity for this reconciled identity. Linking that identity to current Trading Floor cards remains pending and is not inferred by name.</p>}
         {isLegacyProfile && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">{stats?.current_counts_are_dynamic ? 'WTS/WTB totals and the listing cards below are calculated dynamically from the current released Rolex, Patek Philippe, and Audemars Piguet listing lineage.' : `Captured WTS/WTB values are historical source snapshots across ${stats?.snapshot_range?.snapshot_count || 0} observations. ${payload.dynamic_activity_status === 'UNLINKED_IDENTITY_NAMESPACE' ? 'This legacy ID has no exact match in the current released listing identity namespace, so no listing ownership is inferred by name.' : 'They do not replace live totals calculated from verified listing lineage.'}`}</p>}
-        {stats?.verified_contact_info?.phone && (
-          <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={`https://wa.me/${stats.verified_contact_info.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer">
+        {stats?.contact_action?.startsWith('/api/dealer-contact?') && (
+          <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={stats.contact_action} target="_blank" rel="noreferrer">
             <MessageCircle size={15} /> Contact verified poster on WhatsApp
           </a>
         )}
