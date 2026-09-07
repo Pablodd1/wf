@@ -37,7 +37,14 @@ async function run(options) {
       continue;
     }
     const results = members.map(normalizeClaim);
-    await rpc('complete_normalization_batch_v2', { p_job_name: jobName, p_lease_id: lease, p_results: results });
+    try {
+      await rpc('complete_normalization_batch_v2', { p_job_name: jobName, p_lease_id: lease, p_results: results });
+    } catch (error) {
+      // A long response retry can outlive its lease. The database rejected the
+      // whole completion; re-enter the queue instead of ending every worker.
+      if (error.postgresCode === '22023' && error.reason === 'normalization_lease_membership_mismatch') continue;
+      throw error;
+    }
     const current = await rpc('get_normalization_job_v2', { p_job_name: jobName });
     onProgress(current);
     if (current.complete) return current;
@@ -60,7 +67,14 @@ function createRpc(env) {
         // A response body can time out after headers arrive. Await it inside
         // the retry boundary so the same idempotent request is retried.
         if (response.ok) return await response.json();
-        if (response.status !== 429 && response.status < 500) throw Object.assign(new Error('NORMALIZATION_RPC_REJECTED_' + response.status), { permanent: true });
+        if (response.status !== 429 && response.status < 500) {
+          let failure = {};
+          try { failure = await response.json(); } catch { /* Keep the status if no error body is readable. */ }
+          const reason = /^[a-z][a-z_]{1,100}$/.test(failure.message || '') ? failure.message : null;
+          const postgresCode = /^[A-Z0-9]{5}$/.test(failure.code || '') ? failure.code : null;
+          throw Object.assign(new Error('NORMALIZATION_RPC_REJECTED_' + response.status + (reason ? '_' + reason.toUpperCase() : '')),
+            { permanent: true, reason, postgresCode });
+        }
       } catch (error) {
         if (error.permanent) throw error;
       }
