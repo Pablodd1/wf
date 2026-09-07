@@ -685,3 +685,8 @@ Remaining work: validate the additional poster plan against current production i
 ### 2026-09-07 20:59 UTC - acknowledged contact incident and scope update
 
 Owner acknowledgment is recorded in docs/dealer-contact-incident-status-2026-09-07.md. Incident remains open pending fresh deployed public-response and DOM verification. No repeat acknowledgment request. Additional dealer-consent import paused; existing consented opaque contacts and listing publication continue. Normalization is complete for all 1,527,898 inputs; full materialization/publication remain active.
+
+
+### 2026-09-07 21:24 UTC - dealer work deferred by owner
+
+Latest instruction supersedes the earlier dealer-linking work: no dealer/user work for now. Finish Trading Floor and Price Research card display; contact-card enhancements may wait. The owned dealer-link reconciliation process was stopped and restart guarded; existing consent state is preserved. Listing publication and full materialization remain authorized.
