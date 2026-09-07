@@ -33,7 +33,7 @@ These are different stages and must not be added together. Candidate counts are 
 
 The existing UI layout is preserved. Desktop 50-card and mobile 24-card checks passed: source messages matched the API, displayed image URLs matched the original listing, real source images rendered, and no horizontal overflow or API failures occurred. No images were generated. Price Research's selected-reference image display passed.
 
-The complete current Price Research snapshot passed at 21:26:54 UTC: 1,457 rows across 15 pages, 1,448 source images, every row with verified USD, every row WTS, zero missing/duplicate IDs, and all 52 card fields compared with the frozen database snapshot. A larger full Trading Floor snapshot audit remains in progress. Its earlier attempt lost an unused idle read-only database connection; the audit now closes that connection after loading its frozen oracle.
+The complete current Price Research snapshot passed at 21:26:54 UTC: 1,457 rows across 15 pages, 1,448 source images, every row with verified USD, every row WTS, zero missing/duplicate IDs, and all 52 card fields compared with the frozen database snapshot. The larger full Trading Floor snapshot audit remains pending. Its earlier attempt lost an unused idle read-only database connection; the audit now closes that connection after loading its frozen oracle. The latest attempt ended at 21:34:11 UTC with database query timeout 57014 while loading the full oracle, before completing all pages. Preserve that failure receipt and use bounded oracle reads on resumption. This is an incomplete audit, not a passing all-row check.
 
 Sixty-six reviewed forward migrations are applied. Actual disposable PostgreSQL 15/18 and Supabase/PostgREST tests cover the relevant forward migrations, provenance, snapshot membership, rollback and publication gates. The repository-wide suite has documented pre-existing failures; no claim that the entire suite is green is made.
 
@@ -55,7 +55,7 @@ Latest materialization capacity reading: 107.22 GB of database data, against 135
 
 Remaining active work: finish full-boundary materialization; publish every eligible remaining single; finish full Trading Floor and final Price Research snapshot/API/browser reconciliation; reconcile published/review/bundle/duplicate/quarantine/error totals; retain exact final deployment and rollback evidence; then shut down owned workers. Bundles and dealer work remain deferred. Unsupported other-luxury categories remain in durable review and must not be described as published.
 
-At save time the owned materializer and publisher were running, along with a read-only Trading Floor audit. They checkpoint locally and in Supabase. A laptop restart will stop local processes; resume from the durable database state, verify owned advisory-lock holders and exact live release, and never launch duplicate workers. Do not restart paused dealer helpers.
+At save time the owned materializer and publisher were running. The read-only Trading Floor audit had ended with the query timeout recorded above. Workers checkpoint locally and in Supabase. A laptop restart will stop local processes; resume from the durable database state, verify owned advisory-lock holders and exact live release, and never launch duplicate workers. Do not restart paused dealer helpers.
 
 ## Saved evidence
 
