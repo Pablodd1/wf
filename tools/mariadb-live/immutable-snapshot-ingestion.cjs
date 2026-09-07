@@ -33,24 +33,33 @@ async function ingestChunk(db,{manifestSha256,chunkIndex,records,onBatch=()=>{}}
  // the exact source/hash tuple; the final chunk binding is atomic and checked.
  for(let offset=0;offset<records.length;offset+=250){
   const batch=records.slice(offset,offset+250);
+  // Send canonical source bytes once. PostgreSQL reconstructs ordinary JSON
+  // and its message; only lossless transport envelopes need a separate value.
+  const incoming=batch.map(({raw_payload,raw_message,...r})=>({...r,
+   raw_payload_override:raw_payload._lossless_raw_evidence?raw_payload:null}));
+  const identities=batch.map(({source_system,source_database,source_table,source_id,source_hash})=>
+   ({source_system,source_database,source_table,source_id,source_hash}));
   await db.query('BEGIN');
   try{
    const saved=await db.query(`WITH incoming AS (
     SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(source_system text,source_database text,source_table text,
-     source_id text,source_record_id text,source_hash text,raw_sha256 text,raw_payload_text text,raw_payload jsonb,
-     raw_message text,raw_message_source text,captured_at timestamptz,hash_algorithm text,canonicalization_version text)
+     source_id text,source_record_id text,source_hash text,raw_sha256 text,raw_payload_text text,raw_payload_override jsonb,
+     raw_message_source text,captured_at timestamptz,hash_algorithm text,canonicalization_version text)
+   ), decoded AS (
+    SELECT incoming.*,coalesce(raw_payload_override,raw_payload_text::jsonb) raw_payload FROM incoming
    ) INSERT INTO wf_canonical_staging.mariadb_raw_source_rows
     (source_system,source_database,source_table,source_id,source_record_id,source_hash,raw_sha256,raw_payload_text,
      raw_payload,raw_message,raw_message_source,captured_at,hash_algorithm,canonicalization_version)
    SELECT source_system,source_database,source_table,source_id,source_record_id,source_hash,raw_sha256,raw_payload_text,
-     raw_payload,raw_message,raw_message_source,captured_at,hash_algorithm,canonicalization_version FROM incoming
-   ON CONFLICT(source_system,source_database,source_table,source_id,source_hash) DO NOTHING RETURNING id`,[JSON.stringify(batch)]);
+     raw_payload,raw_payload->>raw_message_source,raw_message_source,captured_at,hash_algorithm,canonicalization_version FROM decoded
+   ON CONFLICT(source_system,source_database,source_table,source_id,source_hash) DO NOTHING RETURNING id`,[JSON.stringify(incoming)]);
    const resolved=await db.query(`SELECT r.id,r.source_id,r.source_hash FROM jsonb_to_recordset($1::jsonb)
-    AS x(source_system text,source_database text,source_table text,source_id text,source_hash text,raw_payload_text text)
+    AS x(source_system text,source_database text,source_table text,source_id text,source_hash text)
     JOIN wf_canonical_staging.mariadb_raw_source_rows r ON
     (r.source_system,r.source_database,r.source_table,r.source_id,r.source_hash)=
     (x.source_system,x.source_database,x.source_table,x.source_id,x.source_hash)
-    WHERE r.raw_payload_text=x.raw_payload_text ORDER BY r.source_id COLLATE "C"`,[JSON.stringify(batch)]);
+    WHERE encode(extensions.digest(convert_to(r.raw_payload_text,'UTF8'),'sha256'),'hex')=x.source_hash
+    ORDER BY r.source_id COLLATE "C"`,[JSON.stringify(identities)]);
    if(resolved.rows.length!==batch.length)throw new Error('SNAPSHOT_EXISTING_RAW_CONTENT_MISMATCH');
    await db.query('COMMIT');inserted+=saved.rowCount;ids.push(...resolved.rows.map(r=>r.id));
    await onBatch({committed_rows:ids.length,new_rows:inserted});
