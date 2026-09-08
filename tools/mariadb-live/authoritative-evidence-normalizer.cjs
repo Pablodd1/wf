@@ -133,6 +133,12 @@ function literalIntentRecoveryReviewReasons(text, reference, brand, evidence) {
   if (evidence.attached_reference) validationText = validationText.replace(/^([^\p{L}\p{N}]*NTQ)(?=\d)/iu, '$1 ');
   const tokens = validationText.match(/[A-Z0-9]+(?:[./-][A-Z0-9]+)*/gi) || [];
   const reasons = [];
+  // An attached NTQ reference establishes the requested token, not its maker.
+  // Keep the diagnostic reference without promoting inferred brand provenance.
+  if (evidence.attached_reference && !BRAND_HEADERS.some(([pattern, name]) =>
+    name === brand && pattern.test(validationText))) {
+    reasons.push('RECOVERED_INTENT_MANUFACTURER_SOURCE_EVIDENCE_MISSING');
+  }
   if (!tokens.some(token => token.toUpperCase() === reference.toUpperCase())) {
     reasons.push('RECOVERED_INTENT_REFERENCE_TOKEN_INCOMPLETE');
   }

@@ -96,3 +96,41 @@ test('recovered intent still holds multiple references, all-model requests and s
     assert.ok(result.exclusion_reasons.some(reason => reason.startsWith('RECOVERED_INTENT_')), text);
   }
 });
+
+test('attached NTQ cannot promote contradictory or uncorroborated metadata to a manufacturer', () => {
+  for (const [text, raw, reference] of [
+    ['Ntq116000', { brand: 'Hublot', reference: 'HUBLOT', model: 'Wooden Model' }, '116000'],
+    ['ntq279178 bnib or preowned om tia !', { brand: 'Rolex', reference: '279178', model: 'Datejust' }, '279178'],
+    ['NTQ279178 Hublot', {}, '279178'],
+    ['NTQ279178 Rolexish', { brand: 'Rolex', reference: '279178' }, '279178']
+  ]) {
+    const row = staged(text, { ...raw, front_image: 'original-ntq.jpg' });
+    const original = JSON.stringify(row);
+    const result = normalizeAuthoritativeRow(row);
+    assert.equal(result.intent, 'WTB');
+    assert.equal(result.reference, reference);
+    assert.equal(result.intent_parsing_evidence.attached_reference, reference);
+    assert.equal(result.trading_floor_status, 'HELD_IDENTITY_INCOMPLETE');
+    assert.equal(result.trading_floor_eligible, false);
+    assert.equal(result.price_research_eligible, false);
+    assert.ok(result.exclusion_reasons.includes('RECOVERED_INTENT_MANUFACTURER_SOURCE_EVIDENCE_MISSING'), text + ': ' + JSON.stringify(result.exclusion_reasons));
+    assert.equal(result.listing_text_evidence, text);
+    assert.equal(result.listing_text_sha256, hash(text));
+    assert.equal(result.image_key, 'original-ntq.jpg');
+    assert.equal(result.image_url, null);
+    assert.equal(JSON.stringify(row), original);
+  }
+});
+
+test('attached NTQ with a bounded matching source manufacturer remains eligible', () => {
+  const text = 'NTQ279178 Rolex bnib';
+  const result = normalizeAuthoritativeRow(staged(text, { brand: 'Hublot', reference: 'HUBLOT' }));
+  assert.equal(result.intent, 'WTB');
+  assert.equal(result.reference, '279178');
+  assert.equal(result.brand, 'Rolex');
+  assert.equal(result.trading_floor_status, 'ELIGIBLE_WTB');
+  assert.equal(result.trading_floor_eligible, true);
+  assert.equal(result.price_research_eligible, false);
+  assert.equal(result.listing_text_evidence, text);
+  assert.equal(result.listing_text_sha256, hash(text));
+});
