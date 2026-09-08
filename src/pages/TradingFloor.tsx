@@ -19,7 +19,7 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
-import { canaryBrowseEnabled, loadPublishedBrowse } from '../utils/publishedBrowse';
+import { canaryBrowseEnabled, loadPublishedBrowse, publishedBrowseBrand } from '../utils/publishedBrowse';
 import { ambiguousPriceDisplay, strongestPostingIdentity, listingAvailabilityLabel } from '../lib/customerEvidence';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
@@ -476,7 +476,7 @@ export default function TradingFloor() {
     : '';
   const sortMode: SortMode = requestedSort === 'discovery' ? 'discovery' : 'newest';
   const search = searchParams.get('q') || '';
-  const requestedBrand = searchParams.get('brand') || '';
+  const requestedBrand = canaryBrowseEnabled ? publishedBrowseBrand(searchParams.get('brand') || '') : searchParams.get('brand') || '';
   const modelFilter = searchParams.get('model') || '';
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';

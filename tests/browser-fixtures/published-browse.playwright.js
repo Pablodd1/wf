@@ -16,6 +16,7 @@ async page => {
   let slowBrand = '';
   await page.route('**/api/**', async route => {
     const [pathname, query = ''] = route.request().url().replace(/^https?:\/\/[^/]+/, '').split('?');
+    if (pathname === '/api/dictionaries/published-brand-aliases.json') return route.continue();
     const values = Object.fromEntries(query.split('&').filter(Boolean).map(pair => pair.split('=').map(part => decodeURIComponent(part.replace(/\+/g, ' ')))));
     const url = { pathname, search: '?' + query, searchParams: { get: key => values[key], has: key => key in values } };
     calls.push(url.pathname + url.search);
@@ -72,9 +73,19 @@ async page => {
     if (!regionCalls.some(path => decodeURIComponent(path.replace(/\+/g, ' ')).includes(JSON.stringify(selected)))) throw new Error('Region array serialization');
     await page.getByRole('checkbox', { name: 'All locations', exact: true }).click();
   }
+  const aliasRow = rows.find(item => item.brand === 'Rolex');
+  const aliasModel = aliasRow.model || 'Reference-only listings';
+  await page.goto('http://127.0.0.1:5187/#/trading?brand=Datejust&model=' + encodeURIComponent(aliasModel));
+  await page.waitForFunction(expected => document.querySelector('#brand-filter')?.value === 'Rolex' && document.querySelector('#model-filter')?.value === expected, aliasModel);
+  await page.waitForFunction(expected => document.querySelectorAll('article[data-listing-id]').length === expected, Math.min(50, rows.filter(item => item.brand === 'Rolex' && (item.model || 'Reference-only listings') === aliasModel).length));
+  await page.goto('http://127.0.0.1:5187/#/price-research?brand=Datejust&ref=' + encodeURIComponent(aliasRow.reference));
+  await page.waitForFunction(expected => document.querySelector('select[aria-label="Watch brand"]')?.value === 'Rolex' && document.querySelector('#price-reference-input')?.value === expected, aliasRow.reference);
+  await page.waitForTimeout(250);
+  if (!calls.some(path => path.startsWith('/api/canary/price-research?') && path.includes('brand=Rolex') && path.includes('reference=' + encodeURIComponent(aliasRow.reference)))) throw new Error('Alias reference scope changed');
   await page.goto('http://127.0.0.1:5187/#/price-research');
   await page.getByRole('button', { name: /Rolex/ }).first().waitFor();
   const select = page.locator('select').filter({ has: page.locator('option[value="Rolex"]') }).first();
+  await select.selectOption('');
   slowBrand = 'Rolex';
   await select.selectOption('Rolex');
   await select.selectOption('Patek Philippe');
@@ -123,7 +134,7 @@ async page => {
   await sheet.getByRole('button', { name: 'View results', exact: true }).click();
   await page.waitForFunction(() => !new URLSearchParams(location.hash.split('?')[1]).has('model'));
   const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
-  return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true };
+  return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true, exact_alias_deep_link_brand_model_reference: true };
 }
 
 

@@ -10,7 +10,7 @@ import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShort
 import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
 import { loadPriceResearchBatchSummaries } from '../utils/priceResearchBatchSummary';
 import { isHeldRolexPatekBrand } from '../utils/rolexPatekPublication';
-import { canaryBrowseEnabled, loadPublishedBrowse } from '../utils/publishedBrowse';
+import { canaryBrowseEnabled, loadPublishedBrowse, publishedBrowseBrand } from '../utils/publishedBrowse';
 import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
 
 function referenceEvidenceKey(brand: string, reference: string) {
@@ -599,7 +599,7 @@ function ListingComparisonTooltip({ active, label, payload }: {
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
   const initialReference = searchParams.get('ref') || searchParams.get('reference') || '';
-  const initialBrand = searchParams.get('brand') || '';
+  const initialBrand = canaryBrowseEnabled ? publishedBrowseBrand(searchParams.get('brand') || '') : searchParams.get('brand') || '';
   const initialDial = searchParams.get('dial') || searchParams.get('dial_color') || '';
   const initialCondition = searchParams.get('condition') || '';
   const [query, setQuery] = useState(initialReference);

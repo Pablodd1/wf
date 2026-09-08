@@ -1,3 +1,11 @@
+import publishedBrandAliases from '../../api/dictionaries/published-brand-aliases.json';
+
+export function publishedBrowseBrand(value: string): string {
+  const aliases: Record<string, string> = publishedBrandAliases;
+  const key = value.trim().toLowerCase();
+  return Object.hasOwn(aliases, key) ? aliases[key] : value;
+}
+
 export const canaryBrowseEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true'
   || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
 
