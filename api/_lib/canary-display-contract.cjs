@@ -1,10 +1,12 @@
 'use strict';
 const { enforceListingDisplayContract: enforce } = require('../../shared/listing-display-contract.cjs');
+const { publishedBrand } = require('./published-brand-aliases.cjs');
 
 // A genuine external preview needs a reachable synthetic image origin. This
 // transport override cannot apply to production or to real listing evidence.
 function enforceListingDisplayContract(input) {
   const result = enforce(input);
+  result.brand = publishedBrand(result.brand);
   const base = process.env.DISPOSABLE_IMAGE_BASE_URL;
   if (!base) return result;
   if (process.env.VERCEL_ENV !== 'preview' || process.env.WF_DISPOSABLE_PREVIEW !== 'true'

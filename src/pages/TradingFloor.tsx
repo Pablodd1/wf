@@ -19,6 +19,7 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
+import { canaryBrowseEnabled, loadPublishedBrowse, publishedBrowseBrand } from '../utils/publishedBrowse';
 import { ambiguousPriceDisplay, strongestPostingIdentity, listingAvailabilityLabel } from '../lib/customerEvidence';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
@@ -92,6 +93,10 @@ const SORT_OPTIONS = [
   { label: 'Newest observed', value: 'newest' },
   { label: 'Discovery mix', value: 'discovery' },
 ] as const;
+
+function serializeLocations(locations: string[]) {
+  return locations.length ? (canaryBrowseEnabled ? JSON.stringify(locations) : locations.join(',')) : null;
+}
 
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
 import type { ListingDisplayContract } from '../types/listing-display-contract';
@@ -471,18 +476,27 @@ export default function TradingFloor() {
     : '';
   const sortMode: SortMode = requestedSort === 'discovery' ? 'discovery' : 'newest';
   const search = searchParams.get('q') || '';
-  const requestedBrand = searchParams.get('brand') || '';
+  const requestedBrand = canaryBrowseEnabled ? publishedBrowseBrand(searchParams.get('brand') || '') : searchParams.get('brand') || '';
   const modelFilter = searchParams.get('model') || '';
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
   const requestedLocationParam = searchParams.get('location') || '';
   const locationFilters = useMemo(() => {
     if (!requestedLocationParam) return [];
+    if (canaryBrowseEnabled && requestedLocationParam.startsWith('[')) {
+      try {
+        const values: unknown = JSON.parse(requestedLocationParam);
+        return Array.isArray(values) ? values.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())) : [];
+      } catch { return []; }
+    }
     return requestedLocationParam.split(',').map(s => s.trim()).filter(Boolean);
   }, [requestedLocationParam]);
 
-  const [releaseBrands, setReleaseBrands] = useState<string[]>(MASTER_BRAND_LIST);
+  const [releaseBrands, setReleaseBrands] = useState<string[]>(canaryBrowseEnabled ? [] : MASTER_BRAND_LIST);
+  const browseSnapshotRef = useRef<string | undefined>(undefined);
   const [modelOptions, setModelOptions] = useState<CatalogModelOption[]>([]);
+  const [browseError, setBrowseError] = useState(false);
+  const [browseAttempt, setBrowseAttempt] = useState(0);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
@@ -523,6 +537,7 @@ export default function TradingFloor() {
     sortMode !== 'newest',
   ].filter(Boolean).length;
   const locationOptions = useMemo(() => {
+    if (canaryBrowseEnabled) return [...new Set([...locationFilters, ...discoveredLocations])].sort((a, b) => a.localeCompare(b));
     const countries = listings
       .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
       .filter((value): value is string => Boolean(value));
@@ -553,7 +568,7 @@ export default function TradingFloor() {
       chips.push({
         key: `location-${location}`,
         label: location,
-        updates: { location: remaining.length ? remaining.join(',') : null },
+        updates: { location: serializeLocations(remaining) },
       });
     }
     return chips;
@@ -580,6 +595,24 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setBrowseError(false);
+    if (canaryBrowseEnabled) {
+      setModelOptions([]);
+      void loadPublishedBrowse('trading_floor', brandFilter, '', controller.signal, browseSnapshotRef.current)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          browseSnapshotRef.current = payload.snapshot_id;
+          setReleaseBrands(payload.brands.map(item => item.brand));
+          setModelOptions(payload.models);
+          setDiscoveredLocations(payload.availableRegions || []);
+        })
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setModelOptions([]);
+          setBrowseError(true);
+        });
+      return () => controller.abort();
+    }
     if (!brandFilter) {
       setModelOptions([]);
       return () => controller.abort();
@@ -593,7 +626,7 @@ export default function TradingFloor() {
         if (error?.name !== 'AbortError') setModelOptions([]);
       });
     return () => controller.abort();
-  }, [brandFilter]);
+  }, [brandFilter, browseAttempt]);
 
   const openListing = useCallback((listing: ListingRecord) => {
     listScrollPositionRef.current = window.scrollY;
@@ -779,7 +812,9 @@ export default function TradingFloor() {
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
         if (pricedOnly) params.set('priced', 'true');
-        if (locationFilters.length > 0) params.set('region', locationFilters.join(','));
+        if (locationFilters.length > 0) {
+          params.set(canaryBrowseEnabled ? 'regions' : 'region', canaryBrowseEnabled ? JSON.stringify(locationFilters) : locationFilters.join(','));
+        }
 
         const usesReviewedWatchInventory = ['all', 'watches'].includes(categoryFilter);
         if (!usesReviewedWatchInventory) {
@@ -791,6 +826,7 @@ export default function TradingFloor() {
           params.delete('type');
         }
         const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        if (canaryEnabled && sortMode === 'discovery') params.set('sort', 'discovery');
         const endpoint = canaryEnabled ? '/api/canary/trading-floor' : (usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest');
         const combinedAllInventory = !canaryEnabled && combinedFeedActive;
         let data: TradingFloorResponse;
@@ -829,16 +865,16 @@ export default function TradingFloor() {
         let totalCount: number | null = null;
 
         if (data.status === 'ok' && Array.isArray(data.records)) {
-          if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
+          if (!canaryEnabled && Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
             const validBrandStrings = data.publicationBrands
               .map((b: any) => typeof b === 'string' ? b : (typeof b?.brand === 'string' ? b.brand : ''))
               .filter(Boolean);
             setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...validBrandStrings])]);
-          } else {
+          } else if (!canaryEnabled) {
             setReleaseBrands(MASTER_BRAND_LIST);
           }
           nextListings = data.records;
-          if (Array.isArray(data.availableCountries)) {
+          if (!canaryEnabled && Array.isArray(data.availableCountries)) {
             setDiscoveredLocations(current => [...new Set([...current, ...data.availableCountries!.filter(Boolean)])].sort((a, b) => a.localeCompare(b)));
           }
           totalCount = data.total == null ? null : Number(data.total);
@@ -853,7 +889,7 @@ export default function TradingFloor() {
         const nextCountries = nextListings
           .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
           .filter((value): value is string => Boolean(value));
-        if (nextCountries.length > 0) {
+        if (!canaryEnabled && nextCountries.length > 0) {
           setDiscoveredLocations(current => [...new Set([...current, ...nextCountries])].sort((a, b) => a.localeCompare(b)));
         }
         setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
@@ -1025,6 +1061,9 @@ export default function TradingFloor() {
           releaseBrands={releaseBrands}
           model={modelFilter}
           models={modelOptions}
+          browseSnapshot={browseSnapshotRef.current}
+          browseError={browseError}
+          onBrowseRetry={() => setBrowseAttempt(value => value + 1)}
           category={categoryFilter}
           intent={intentFilter}
           sort={sortMode}
@@ -1037,13 +1076,13 @@ export default function TradingFloor() {
             resetResults();
             updateViewParams({
               brand: next.brand || null,
-              model: next.brand === brandFilter ? next.model || null : null,
+              model: next.model || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               sort: next.sort === 'newest' ? null : next.sort,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
-              location: next.locations.length ? next.locations.join(',') : null,
+              location: serializeLocations(next.locations),
             }, false);
           }}
           onClose={() => setFiltersOpen(false)}
@@ -1057,6 +1096,12 @@ export default function TradingFloor() {
           </span>
           <span>{t('Priced listings first; source images next; highest verified USD price within each group.')}</span>
           {error && <span style={{ color: RED }}>{error}</span>}
+          {browseError && (
+            <span role="alert" style={{ color: RED }}>
+              {t("Watch filters couldn't load.")}{' '}
+              <button type="button" aria-label="Retry watch filters" onClick={() => setBrowseAttempt(value => value + 1)} className="font-semibold underline">{t('Retry')}</button>
+            </span>
+          )}
         </div>
 
         {selectedListing ? (
@@ -1250,7 +1295,7 @@ function DesktopFilters({
     const updated = selectedLocations.includes(loc)
       ? selectedLocations.filter(value => value !== loc)
       : [...selectedLocations, loc];
-    onChange({ location: updated.length ? updated.join(',') : null });
+    onChange({ location: serializeLocations(updated) });
   };
 
   const hasActiveFilters = Boolean(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0 || sort !== 'newest');
@@ -1341,7 +1386,7 @@ function DesktopFilters({
             <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Model')} ({models.length})</label>
             <select
               id="model-filter"
-              value={model}
+              value={models.find(option => option.model.toLowerCase() === model.toLowerCase())?.model || model}
               disabled={!brand || models.length === 0}
               onChange={event => onChange({ model: event.target.value || null })}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs disabled:opacity-45"
@@ -1431,6 +1476,9 @@ function MobileFilterSheet({
   releaseBrands,
   model,
   models,
+  browseSnapshot,
+  browseError,
+  onBrowseRetry,
   category,
   intent,
   sort,
@@ -1445,6 +1493,9 @@ function MobileFilterSheet({
   releaseBrands: string[];
   model: string;
   models: CatalogModelOption[];
+  browseSnapshot?: string;
+  browseError: boolean;
+  onBrowseRetry: () => void;
   category: CategoryFilter;
   intent: IntentFilter;
   sort: SortMode;
@@ -1458,6 +1509,10 @@ function MobileFilterSheet({
   const { t } = useLanguage();
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftModel, setDraftModel] = useState(model);
+  const [draftModels, setDraftModels] = useState(models);
+  const [draftModelsError, setDraftModelsError] = useState(false);
+  const [draftBrowseAttempt, setDraftBrowseAttempt] = useState(0);
+  const draftBrowseSnapshotRef = useRef(browseSnapshot);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftSort, setDraftSort] = useState(sort);
@@ -1465,6 +1520,42 @@ function MobileFilterSheet({
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
   const [draftLocations, setDraftLocations] = useState<string[]>(selectedLocations);
   const [mobileLocationSearch, setMobileLocationSearch] = useState('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setDraftModelsError(false);
+    if (draftBrand === brand) {
+      setDraftModels(models);
+      return () => controller.abort();
+    }
+    setDraftModels([]);
+    if (!draftBrand) return () => controller.abort();
+    if (canaryBrowseEnabled) {
+      void loadPublishedBrowse('trading_floor', draftBrand, '', controller.signal, draftBrowseSnapshotRef.current)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          draftBrowseSnapshotRef.current = payload.snapshot_id;
+          setDraftModels(payload.models);
+        })
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setDraftModels([]);
+          setDraftModelsError(true);
+        });
+    } else {
+      fetch(`/api/catalog-models?brand=${encodeURIComponent(draftBrand)}`, { signal: controller.signal })
+        .then(async response => response.ok ? response.json() : null)
+        .then(payload => {
+          if (!controller.signal.aborted) setDraftModels(Array.isArray(payload?.models) ? payload.models : []);
+        })
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setDraftModels([]);
+          setDraftModelsError(true);
+        });
+    }
+    return () => controller.abort();
+  }, [brand, draftBrand, models, draftBrowseAttempt]);
 
   const filteredMobileLocations = useMemo(() => {
     const q = mobileLocationSearch.trim().toLowerCase();
@@ -1500,6 +1591,12 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
+          {browseError && (
+            <div role="alert" className="text-sm" style={{ color: RED }}>
+              {t("Watch filters couldn't load.")}{' '}
+              <button type="button" aria-label="Retry watch filters" onClick={onBrowseRetry} className="font-semibold underline">{t('Retry')}</button>
+            </div>
+          )}
           <FilterGroup label={t('Order')}>
             {SORT_OPTIONS.map(option => (
               <FilterChoice key={option.value} active={draftSort === option.value} label={t(option.label)} onClick={() => setDraftSort(option.value)} />
@@ -1527,18 +1624,24 @@ function MobileFilterSheet({
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => { setDraftBrand(value); setDraftModel(''); }} />
             ))}
           </FilterGroup>
-          <FilterGroup label={`Models (${models.length})`}>
+          <FilterGroup label={`Models (${draftModels.length})`}>
             <select
               id="mobile-model-filter"
-              value={draftModel}
-              disabled={!draftBrand || models.length === 0}
+              value={draftModels.find(option => option.model.toLowerCase() === draftModel.toLowerCase())?.model || draftModel}
+              disabled={!draftBrand || draftModels.length === 0}
               onChange={event => setDraftModel(event.target.value)}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-45"
               style={{ borderColor: BORDER, color: INK }}
             >
               <option value="">All models</option>
-              {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
+              {draftModels.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
+            {draftModelsError && (
+              <div role="alert" className="mt-2 text-xs" style={{ color: RED }}>
+                {t("Models couldn't load.")}{' '}
+                <button type="button" aria-label="Retry models" onClick={() => setDraftBrowseAttempt(value => value + 1)} className="font-semibold underline">{t('Retry')}</button>
+              </div>
+            )}
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
             {draftLocations.length > 0 && (
@@ -1597,6 +1700,7 @@ function MobileFilterSheet({
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
           <button type="button" onClick={() => {
             setDraftBrand('');
+            setDraftModel('');
             setDraftCategory('all');
             setDraftIntent('');
             setDraftSort('newest');
@@ -2204,7 +2308,8 @@ function isPricePlausible(price: number | null) {
 }
 
 function getListingMeta(listing: ListingRecord) {
-  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region);
+  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region)
+    || (listing.contract_version === 'v2.0' ? cleanValue(listing.location_region || listing.region) || null : null);
   const postedDate = formatListingDate(listing.listing_date);
   const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency)).toUpperCase();
   const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');

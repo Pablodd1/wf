@@ -12,6 +12,7 @@ const {
 } = require("../_lib/canary-keyset.cjs");
 const { enforceListingDisplayContract } = require("../_lib/canary-display-contract.cjs");
 const { withExistingCardFields } = require("../_lib/canary-card-fields.cjs");
+const { assertDiscoveryOrder } = require("../_lib/canary-discovery.cjs");
 
 const ALLOWED_QUERY_PARAMS = new Set([
   "pagination",
@@ -30,6 +31,7 @@ const ALLOWED_QUERY_PARAMS = new Set([
   "item",
   "country",
   "region",
+  "regions",
   "images",
   "images_only",
   "imagesOnly",
@@ -37,6 +39,7 @@ const ALLOWED_QUERY_PARAMS = new Set([
   "priced_only",
   "pricedOnly",
   "quality",
+  "sort",
   "page"
 ]);
 
@@ -113,6 +116,12 @@ module.exports = async function handler(req, res) {
     // Cursor is decoded AFTER filter normalization (below) so the scope
     // fingerprint is computed from the exact normalized values used by the RPC.
     const cursorStr = query.cursor || null;
+    if (query.sort !== undefined && typeof query.sort !== "string") return res.status(400).json({ error: "Invalid sort parameter" });
+    const sort = query.sort === undefined ? "newest" : query.sort.trim().toLowerCase();
+    if (!["newest", "discovery"].includes(sort)) return res.status(400).json({ error: "Invalid sort parameter" });
+    // Keep existing default cursor scope byte-identical; alternate ordering is
+    // explicitly bound so a cursor cannot switch order partway through traversal.
+    const orderingScope = sort === "discovery" ? { sort } : {};
 
     // Validate intent / type if provided
     const rawIntent = query.intent !== undefined && query.intent !== null ? query.intent : query.type;
@@ -138,7 +147,18 @@ module.exports = async function handler(req, res) {
       : null;
 
     const countryFilter = query.country ? String(query.country).trim() : null;
-    const regionFilter = query.region ? String(query.region).trim() : null;
+    let regionFilter = query.region ? String(query.region).trim() : null;
+    if (query.regions !== undefined) {
+      try {
+        if (query.region !== undefined || typeof query.regions !== "string") throw new TypeError();
+        const regions = JSON.parse(query.regions);
+        if (!Array.isArray(regions) || regions.length > 50 || regions.some(value => typeof value !== "string" || !value.trim() || value.length > 200)) throw new TypeError();
+        regionFilter = regions.length ? JSON.stringify([...new Set(regions.map(value => value.trim()))].sort()) : null;
+      } catch {
+        return res.status(400).json({ error: "Invalid regions parameter" });
+      }
+    }
+    const regionRpcFilter = query.regions === undefined && regionFilter ? JSON.stringify([regionFilter]) : regionFilter;
 
     const rawImages = query.images !== undefined ? query.images : (query.images_only !== undefined ? query.images_only : query.imagesOnly);
     const imagesOnlyFilter = parseStrictBoolean("images", rawImages);
@@ -149,6 +169,7 @@ module.exports = async function handler(req, res) {
     // Decode + validate the snapshot cursor envelope against the normalized
     // filter scope (fail closed with HTTP 400; never restart at page 1).
     const cursorScope = computeCursorScope("trading_floor", {
+      ...orderingScope,
       brand: brandFilter,
       model: modelFilter,
       intent: intentFilter,
@@ -165,6 +186,7 @@ module.exports = async function handler(req, res) {
         parsedCursor = decodeCursorEnvelope(cursorStr, {
           surface: "trading_floor",
           filters: {
+            ...orderingScope,
             brand: brandFilter,
             model: modelFilter,
             intent: intentFilter,
@@ -204,7 +226,7 @@ module.exports = async function handler(req, res) {
       p_query: queryFilter,
       p_category: categoryFilter,
       p_country: countryFilter,
-      p_region: regionFilter,
+      p_region: regionRpcFilter,
       p_images_only: imagesOnlyFilter,
       p_priced_only: pricedOnlyFilter
     };
@@ -221,7 +243,7 @@ module.exports = async function handler(req, res) {
       p_query: queryFilter,
       p_category: categoryFilter,
       p_country: countryFilter,
-      p_region: regionFilter,
+      p_region: regionRpcFilter,
       p_images_only: imagesOnlyFilter,
       p_priced_only: pricedOnlyFilter,
       p_cursor_priced_rank: parsedCursor ? parsedCursor.key.pricedRank : null,
@@ -232,14 +254,15 @@ module.exports = async function handler(req, res) {
     };
 
     // Phase 5.1 + RC50 F2: v4 returns frozen membership key columns (k_*) + payload jsonb frozen at snapshot-open time.
-    const { data, error } = await supabase.rpc("get_trading_floor_canary_keyset_v4", rpcParams);
+    const { data, error } = await supabase.rpc(sort === "discovery" ? "get_trading_floor_discovery_keyset_v1" : "get_trading_floor_canary_keyset_v4", rpcParams);
     if (error) {
       const cursorFault = mapSnapshotRpcError(error);
       if (cursorFault) throw cursorFault;
       throw error;
     }
     // Order assertion compares the FROZEN membership columns (k_*).
-    assertKeysetOrder(data || []);
+    if (sort === "discovery") assertDiscoveryOrder(data || []);
+    else assertKeysetOrder(data || []);
 
     // Enforce canonical ListingDisplayContract and redact public text.
     // Display records come from the FROZEN snapshot payload; cursor keys never do.
@@ -278,6 +301,7 @@ module.exports = async function handler(req, res) {
       total: totalCount,
       snapshot_total: totalCount,
       snapshot: snapshotId,
+      sort,
       nextCursor: nextCursor,
       hasMore: nextCursor !== null,
       exhausted: nextCursor === null
