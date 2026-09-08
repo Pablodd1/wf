@@ -1371,7 +1371,7 @@ function DesktopFilters({
             <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Model')} ({models.length})</label>
             <select
               id="model-filter"
-              value={model}
+              value={models.find(option => option.model.toLowerCase() === model.toLowerCase())?.model || model}
               disabled={!brand || models.length === 0}
               onChange={event => onChange({ model: event.target.value || null })}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs disabled:opacity-45"
@@ -1591,7 +1591,7 @@ function MobileFilterSheet({
           <FilterGroup label={`Models (${draftModels.length})`}>
             <select
               id="mobile-model-filter"
-              value={draftModel}
+              value={draftModels.find(option => option.model.toLowerCase() === draftModel.toLowerCase())?.model || draftModel}
               disabled={!draftBrand || draftModels.length === 0}
               onChange={event => setDraftModel(event.target.value)}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-45"

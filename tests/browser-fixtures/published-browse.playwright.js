@@ -13,6 +13,7 @@ async page => {
   const brands = group(rows, 'brand');
   const regions = [...new Set(rows.map(item => item.location_region).filter(Boolean))];
   const calls = [];
+  const same = (left, right) => String(left || '').toLowerCase() === String(right || '').toLowerCase();
   let slowBrand = '';
   await page.route('**/api/**', async route => {
     const [pathname, query = ''] = route.request().url().replace(/^https?:\/\/[^/]+/, '').split('?');
@@ -23,15 +24,15 @@ async page => {
     if (url.pathname === '/api/canary/browse') {
       const brand = url.searchParams.get('brand');
       const model = url.searchParams.get('model');
-      let members = brand ? rows.filter(item => item.brand === brand) : rows;
+      let members = brand ? rows.filter(item => same(item.brand, brand)) : rows;
       const models = group(members, 'model');
-      if (model) members = members.filter(item => (item.model || 'Reference-only listings') === model);
+      if (model) members = members.filter(item => same(item.model || 'Reference-only listings', model));
       payload = { success: true, snapshot_id: 'fixture-source-backed', brands, models, references: group(members, 'reference'), availableRegions: regions };
       if (brand === slowBrand) await page.waitForTimeout(600);
     } else if (url.pathname === '/api/canary/trading-floor') {
       const size = Number(url.searchParams.get('pageSize') || 50);
-      let members = rows.filter(item => !url.searchParams.get('brand') || item.brand === url.searchParams.get('brand'));
-      if (url.searchParams.get('model')) members = members.filter(item => (item.model || 'Reference-only listings') === url.searchParams.get('model'));
+      let members = rows.filter(item => !url.searchParams.get('brand') || same(item.brand, url.searchParams.get('brand')));
+      if (url.searchParams.get('model')) members = members.filter(item => same(item.model || 'Reference-only listings', url.searchParams.get('model')));
       if (url.searchParams.get('sort') === 'discovery') members = [...members].reverse();
       const offset = url.searchParams.has('cursor') ? size : 0;
       payload = { ...live, records: members.slice(offset, offset + size), total: members.length, hasMore: offset + size < members.length, nextCursor: offset + size < members.length ? 'fixture-page2' : null };
@@ -77,6 +78,20 @@ async page => {
   await page.goto('http://127.0.0.1:5187/#/trading?brand=Datejust&model=' + encodeURIComponent(aliasModel));
   await page.waitForFunction(expected => document.querySelector('#brand-filter')?.value === 'Rolex' && document.querySelector('#model-filter')?.value === expected, aliasModel);
   await page.waitForFunction(expected => document.querySelectorAll('article[data-listing-id]').length === expected, Math.min(50, rows.filter(item => item.brand === 'Rolex' && (item.model || 'Reference-only listings') === aliasModel).length));
+  const caseRow = rows.find(item => item.brand === 'Richard Mille' && item.model);
+  if (!caseRow) throw new Error('Source-backed case fixture unavailable');
+  await page.goto('http://127.0.0.1:5187/#/trading?brand=' + encodeURIComponent(caseRow.brand.toLowerCase()) + '&model=' + encodeURIComponent(caseRow.model.toLowerCase()));
+  await page.waitForFunction(expected => document.querySelector('#brand-filter')?.value === expected.brand && document.querySelector('#model-filter')?.value === expected.model, caseRow);
+  if (!(await page.evaluate(() => location.hash)).includes('model=' + encodeURIComponent(caseRow.model.toLowerCase()))) throw new Error('Case-only query scope rewritten');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: /^Filter/ }).click();
+  await page.waitForFunction(expected => document.querySelector('#mobile-model-filter')?.value === expected, caseRow.model);
+  await page.getByRole('dialog', { name: 'Filter inventory' }).getByRole('button', { name: 'Close filters', exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('http://127.0.0.1:5187/#/price-research?brand=' + encodeURIComponent(caseRow.brand.toLowerCase()) + '&ref=' + encodeURIComponent(caseRow.reference));
+  await page.waitForFunction(expected => document.querySelector('select[aria-label="Watch brand"]')?.value === expected.brand && document.querySelector('#price-reference-input')?.value === expected.reference, caseRow);
+  const caseScope = await page.evaluate(() => Object.fromEntries(new URLSearchParams(location.hash.split('?')[1])));
+  if (caseScope.brand !== caseRow.brand.toLowerCase() || caseScope.ref !== caseRow.reference) throw new Error('Case-only reference scope rewritten');
   await page.goto('http://127.0.0.1:5187/#/price-research?brand=Datejust&ref=' + encodeURIComponent(aliasRow.reference));
   await page.waitForFunction(expected => document.querySelector('select[aria-label="Watch brand"]')?.value === 'Rolex' && document.querySelector('#price-reference-input')?.value === expected, aliasRow.reference);
   await page.waitForTimeout(250);
@@ -133,7 +148,7 @@ async page => {
   await sheet.getByRole('button', { name: 'View results', exact: true }).click();
   await page.waitForFunction(() => !new URLSearchParams(location.hash.split('?')[1]).has('model'));
   const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
-  return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true, exact_alias_deep_link_brand_model_reference: true };
+  return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true, exact_alias_deep_link_brand_model_reference: true, case_only_url_selects_without_scope_rewrite: true };
 }
 
 

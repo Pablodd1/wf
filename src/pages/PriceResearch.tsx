@@ -1335,6 +1335,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
+  const displayedQueryBrand = pBrands.find(item => item.brand.toLowerCase() === queryBrand.toLowerCase())?.brand || queryBrand;
+  const displayedPickerBrand = pBrands.find(item => item.brand.toLowerCase() === pBrand.toLowerCase())?.brand || pBrand;
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
@@ -1368,20 +1370,20 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             <div>
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
               <p className="mt-1 max-w-xl text-sm text-white/60">Search catalog-backed market evidence by watch reference.</p>
-              {queryBrand === 'Rolex' && <p className="mt-2 text-xs text-[#d8be7a]">All available Rolex references are searchable. Select an autocomplete result to load that reference’s WTS prices, WTB demand, users, raw listings, and charts.</p>}
+              {displayedQueryBrand === 'Rolex' && <p className="mt-2 text-xs text-[#d8be7a]">All available Rolex references are searchable. Select an autocomplete result to load that reference’s WTS prices, WTB demand, users, raw listings, and charts.</p>}
             </div>
             <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
               <label className="block">
                 <span className="sr-only">Watch brand</span>
                 <select
                   aria-label="Watch brand"
-                  value={queryBrand}
+                  value={displayedQueryBrand}
                   onChange={event => void loadModels(event.target.value)}
                   className="h-11 w-full rounded-md border border-white/20 bg-[#1a1a20] px-3 text-sm text-white outline-none focus:border-[#c9a03a]"
                 >
                   <option value="">Select brand</option>
-                  {queryBrand && !pBrands.some(item => item.brand === queryBrand) && (
-                    <option value={queryBrand}>{queryBrand}</option>
+                  {displayedQueryBrand && !pBrands.some(item => item.brand === displayedQueryBrand) && (
+                    <option value={displayedQueryBrand}>{displayedQueryBrand}</option>
                   )}
                   {pBrands.map(item => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
                 </select>
@@ -1479,7 +1481,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           </div>
           <PriorityReferenceShortcuts
             mode="research"
-            activeBrand={queryBrand}
+            activeBrand={displayedQueryBrand}
             activeReference={query}
             onSelect={cohort => {
               setSelectedCatalogReference(null);
@@ -1501,12 +1503,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             <nav aria-label="Catalog selection" className="mb-4 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
               <button type="button" onClick={() => { void loadModels(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
               {pBrand && <span aria-hidden="true">/</span>}
-              {pBrand && <button type="button" onClick={() => { void loadRefs(pBrand, ''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
+              {pBrand && <button type="button" onClick={() => { void loadRefs(pBrand, ''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{displayedPickerBrand}</button>}
               {pModel && <span aria-hidden="true">/</span>}
               {pModel && <span>{displayCatalogModel(pModel)}</span>}
             </nav>
           )}
-          <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${displayedPickerBrand} model` : 'Choose a brand'}</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
             Brands come from the complete available inventory. Two source-qualified comparable observations are required before price analytics are published.
           </div>
@@ -1542,8 +1544,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           {pBrand && !pModel && pModels.length > 0 && (
             <>
               <label style={{ display: 'block', marginBottom: 10 }}>
-                <span className="sr-only">Search models for {pBrand}</span>
-                <input type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} placeholder={`Search all ${pModels.length} ${pBrand} models`} style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }} />
+                <span className="sr-only">Search models for {displayedPickerBrand}</span>
+                <input type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} placeholder={`Search all ${pModels.length} ${displayedPickerBrand} models`} style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }} />
               </label>
               <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>{visibleModels.length} of {pModels.length} models</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
