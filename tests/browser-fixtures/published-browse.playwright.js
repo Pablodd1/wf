@@ -107,6 +107,13 @@ async page => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('http://127.0.0.1:5187/#/price-research?brand=' + encodeURIComponent(caseRow.brand.toLowerCase()) + '&ref=' + encodeURIComponent(caseRow.reference));
   await page.waitForFunction(expected => document.querySelector('select[aria-label="Watch brand"]')?.value === expected.brand && document.querySelector('#price-reference-input')?.value === expected.reference, caseRow);
+  const unresolvedCohortRow = research.rows.find(row => row.analytics_included === false && !row.is_outlier && row.price_usd > 0 && row.raw_message);
+  if (!unresolvedCohortRow) throw new Error('Source-backed unresolved cohort fixture unavailable');
+  const unresolvedCohortCard = page.locator('button[aria-label^="View source detail for"]').filter({ hasText: unresolvedCohortRow.raw_message }).first();
+  await unresolvedCohortCard.getByText('Not used in chart or statistics', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await unresolvedCohortCard.getByText('Not used in analytics', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const caseScope = await page.evaluate(() => Object.fromEntries(new URLSearchParams(location.hash.split('?')[1])));
   if (caseScope.brand !== caseRow.brand.toLowerCase() || caseScope.ref !== caseRow.reference) throw new Error('Case-only reference scope rewritten');
   await page.goto('http://127.0.0.1:5187/#/price-research?brand=Datejust&ref=' + encodeURIComponent(aliasRow.reference));
@@ -171,7 +178,7 @@ async page => {
   await sheet.getByRole('button', { name: 'View results', exact: true }).click();
   await page.waitForFunction(() => !new URLSearchParams(location.hash.split('?')[1]).has('model'));
   const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, initial_browse_failure_visible_and_retry_recovers: true, browse_retry_preserves_inventory: true, mobile_model_failure_visible_and_retry_recovers: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
-  return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true, exact_alias_deep_link_brand_model_reference: true, case_only_url_selects_without_scope_rewrite: true };
+  return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true, exact_alias_deep_link_brand_model_reference: true, case_only_url_selects_without_scope_rewrite: true, unresolved_cohort_analytics_label_consistent_desktop_mobile: true };
 }
 
 

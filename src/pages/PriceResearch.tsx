@@ -2617,7 +2617,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       <div className="hidden sm:block" style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</div>
         <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>
-          {excludedFromAverages ? 'Not used in chart or statistics' : 'Used in chart and statistics'}
+          {excludedFromAverages || row.analytics_included === false ? 'Not used in chart or statistics' : 'Used in chart and statistics'}
         </div>
       </div>
       <Eye className="hidden h-3.5 w-3.5 sm:block" style={{ color: MUTED, flexShrink: 0 }} />
