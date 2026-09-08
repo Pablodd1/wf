@@ -21,7 +21,7 @@ async function importReviewedSourceCompanies(db,{snapshotBytes,expectedSnapshotS
  }
  const review=prepareCompanyDealerEvidence(snapshotBytes,expectedSnapshotSha256,{includeSourcePosters:!!permission}),snapshot=JSON.parse(snapshotBytes.toString('utf8'));
  if(snapshot.capture_scope!=='COMPLETE_TABLE'||snapshot.expected_rows!==snapshot.companies.length||!Array.isArray(identities)||!identities.length||identities.length>5000)refuse('COMPANY_IMPORT_BOUNDARY_INVALID');
- const seen=new Set(),prepared=[];
+ const seen=new Set(),prepared=[],companyById=new Map(snapshot.companies.map(company=>[String(company.id),company]));
  for(const selected of identities){
   const key=selected.company_id+':'+selected.phone;if(seen.has(key))refuse('COMPANY_IMPORT_DUPLICATE_IDENTITY');seen.add(key);
   const found=await db.query(`SELECT * FROM wf_canonical_staging.mariadb_raw_source_rows
@@ -31,13 +31,33 @@ async function importReviewedSourceCompanies(db,{snapshotBytes,expectedSnapshotS
   const raw=found.rows[0],proof=review(raw);
   if(typeof raw.raw_payload_text!=='string'||crypto.createHash('sha256').update(raw.raw_payload_text).digest('hex')!==raw.source_hash)refuse('COMPANY_IMPORT_RAW_BYTES_MISMATCH');
   if(proof.outcome!==(permission?'EXACT_SOURCE_POSTER_CANDIDATE':'VERIFIED_SOURCE_IDENTITY_CANDIDATE')||proof.company_id!==selected.company_id||proof.private_phone_identity!==selected.phone||proof.company_fields_sha256!==selected.company_fields_sha256||!/^\+?[1-9]\d{7,14}$/.test(proof.private_phone_identity||''))refuse('COMPANY_IMPORT_SOURCE_PROOF_MISMATCH');
-  const name=redactPublicSource(proof.source_company_name).trim();
+  let name=redactPublicSource(proof.source_company_name).trim();
+  let publicNameEvidence=null,companyName=null;
+  if(selected.public_name_review){
+   const review=selected.public_name_review;
+   if(review.contract==='WF_EXACT_SOURCE_POSTER_LABEL_REVIEW_V3'){
+    if(!permission||review.source_field!=='from_name'||review.raw_row_id!==raw.id||review.source_id!==raw.source_id||review.source_hash!==raw.source_hash
+     ||typeof raw.raw_payload.from_name!=='string'||review.source_text_sha256!==crypto.createHash('sha256').update(raw.raw_payload.from_name).digest('hex')
+     ||review.normalized_name!==raw.raw_payload.from_name||!/^[a-f0-9]{64}$/.test(review.review_packet_sha256||''))refuse('COMPANY_IMPORT_PUBLIC_NAME_PROOF_MISMATCH');
+    name=redactPublicSource(review.normalized_name).trim();publicNameEvidence=review;
+   }else{
+   if(review.contract!=='WF_EXACT_SOURCE_NAME_WHITESPACE_REVIEW_V1'||review.source_field!=='name'
+    ||typeof proof.source_company_name!=='string'||companyById.get(selected.company_id)?.name!==proof.source_company_name
+    ||review.source_text_sha256!==crypto.createHash('sha256').update(proof.source_company_name).digest('hex')
+    ||review.normalized_name!==proof.source_company_name.replace(/\s+/gu,' ').trim()
+    ||!/^[a-f0-9]{64}$/.test(review.review_packet_sha256||''))refuse('COMPANY_IMPORT_PUBLIC_NAME_PROOF_MISMATCH');
+   name=redactPublicSource(review.normalized_name);
+   publicNameEvidence=review;
+   }
+  }
+  if(publicNameEvidence?.contract!=='WF_EXACT_SOURCE_POSTER_LABEL_REVIEW_V3')companyName=name;
   if(!name||name.length>200||/^[\d\s()+.-]+$/.test(name)||/\[.*redacted\]/.test(name)||/[\u0000-\u001f]/.test(name))refuse('COMPANY_IMPORT_PUBLIC_NAME_REQUIRES_REVIEW');
-  prepared.push({id:companyUuid(proof.company_id),name,phone:proof.private_phone_identity,status:permission?'UNVERIFIED':'VERIFIED',identitySource:permission?'WF_SOURCE_POSTER_V1':'WF_VERIFIED_SOURCE_COMPANY_V1',metadata:{contract:permission?'WF_COMPLETE_SOURCE_POSTER_IDENTITY_V1':'WF_COMPLETE_SOURCE_COMPANY_IDENTITY_V1',company_id:proof.company_id,
+  prepared.push({id:companyUuid(proof.company_id),name,companyName,phone:proof.private_phone_identity,status:permission?'UNVERIFIED':'VERIFIED',identitySource:permission?'WF_SOURCE_POSTER_V1':'WF_VERIFIED_SOURCE_COMPANY_V1',metadata:{contract:permission?'WF_COMPLETE_SOURCE_POSTER_IDENTITY_V1':'WF_COMPLETE_SOURCE_COMPANY_IDENTITY_V1',company_id:proof.company_id,
    company_snapshot_sha256:expectedSnapshotSha256,company_fields_sha256:proof.company_fields_sha256,
    source_system:raw.source_system,source_database:raw.source_database,source_table:raw.source_table,
    evidence_raw_row_id:raw.id,evidence_source_id:raw.source_id,evidence_source_hash:raw.source_hash,
    company_observed_at:proof.company_observed_at,contact_consent_inferred:false,reviews_inferred:false,
+   ...(publicNameEvidence?{public_name_review:publicNameEvidence}:{}),
    ...(permission?{source_identity_evidence:'EXACT_COMPANY_PHONE_MATCH',contact_permission_evidence:permission,dealer_verification_inferred:false}:{})}});
  }
  // Caller owns BEGIN/COMMIT/ROLLBACK for this owner-only operation.
@@ -47,11 +67,11 @@ async function importReviewedSourceCompanies(db,{snapshotBytes,expectedSnapshotS
  for(const p of prepared){
   const old=(await db.query('SELECT * FROM public.dealers WHERE id=$1 FOR UPDATE',[p.id])).rows[0];
   if(old){
-   if(old.status!==p.status||old.display_name!==p.name||old.metadata?.contract!==p.metadata.contract||old.metadata?.company_snapshot_sha256!==expectedSnapshotSha256||(permission&&(!old.contact_consent||old.metadata?.contact_permission_evidence?.sha256!==permission.sha256)))refuse('COMPANY_IMPORT_EXISTING_DEALER_CHANGED');
+   if(old.status!==p.status||old.display_name!==p.name||old.company_name!==p.companyName||old.metadata?.contract!==p.metadata.contract||old.metadata?.company_snapshot_sha256!==expectedSnapshotSha256||(permission&&(!old.contact_consent||old.metadata?.contact_permission_evidence?.sha256!==permission.sha256)))refuse('COMPANY_IMPORT_EXISTING_DEALER_CHANGED');
    reused++;
   }else{
    await db.query(`INSERT INTO public.dealers(id,slug,display_name,company_name,status,contact_consent,rating,review_count,verified_at,metadata,last_synced_at)
-    VALUES($1,$2,$3,$3,$4,$5,NULL,0,$6,$7,now())`,[p.id,'source-company-'+p.metadata.company_id,p.name,p.status,!!permission,permission?null:p.metadata.company_observed_at,p.metadata]);created++;
+    VALUES($1,$2,$3,$8,$4,$5,NULL,0,$6,$7,now())`,[p.id,'source-company-'+p.metadata.company_id,p.name,p.status,!!permission,permission?null:p.metadata.company_observed_at,p.metadata,p.companyName]);created++;
   }
   const prior=(await db.query(`SELECT dealer_id,source_system,source_identity,metadata FROM public.dealer_source_identities
    WHERE verification_status='VERIFIED' AND upper(identity_type) IN('PHONE','WHATSAPP') AND public.normalize_seller_phone_identity(source_identity)=$1`,[p.phone])).rows;

@@ -5,7 +5,7 @@ const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 function publicDealer(row, sourceRank = null) {
   const fields=['id','slug','display_name','company_name','country_code','city','rating','review_count',
     'whatsapp_group_count','avatar_url','profile_summary','verified_at','member_since',
-    'source_system','listing_linkage_status','stats'];
+    'source_system','listing_linkage_status','stats','feedback_captured_at','captured_review_entries'];
   const safe=Object.fromEntries(fields.map(field=>[field,row[field] ?? null]));
   safe.source_rank=sourceRank;
   for(const field of ['display_name','company_name','profile_summary']) {

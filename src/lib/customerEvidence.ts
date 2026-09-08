@@ -24,7 +24,12 @@ export function strongestPostingIdentity(record: object) {
 
 export const ambiguousPriceDisplay = contract.customer_publication.ambiguous_price_display;
 
-export function listingAvailabilityLabel(record: { cohort_status?: string | null; current_status?: string | null }) {
+export function listingAvailabilityLabel(record: { cohort_status?: string | null; current_status?: string | null; source_listing_status?: string | null; source_deleted?: boolean | null }) {
+  if (record.source_deleted === true) return 'HISTORICAL · SOURCE MARKED DELETED';
+  const status = record.source_listing_status?.trim().toLowerCase();
+  if (status === 'ended') return 'HISTORICAL · SOURCE ENDED';
+  if (status === 'open') return 'SOURCE MARKED OPEN · CHECK AVAILABILITY';
+  if (status) return `SOURCE STATUS: ${record.source_listing_status} · CHECK AVAILABILITY`;
   return record.cohort_status === 'CONFIRMED_CURRENT' && record.current_status === 'CURRENT_ACTIVE'
     ? 'CONFIRMED CURRENT'
     : 'OBSERVED · CHECK AVAILABILITY';

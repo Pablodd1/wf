@@ -60,7 +60,8 @@ function sanitizeDealerListing(listing) {
 
 function sanitizeDealerProfile(profile) {
   const groups = Array.isArray(profile?.groups) ? profile.groups : [];
-  const groupCount = Number(profile?.stats?.group_count ?? profile?.dealer?.whatsapp_group_count ?? 0);
+  const suppliedGroupCount = profile?.stats?.group_count ?? profile?.dealer?.whatsapp_group_count;
+  const groupCount = suppliedGroupCount == null ? null : Number(suppliedGroupCount);
   const contact = profile?.stats?.verified_contact_info;
   const contactAvailable = ['WATCHFACTS_VERIFIED_DEALERS','WATCHFACTS_SOURCE_POSTERS'].includes(profile?.dealer?.source_system)
     && profile?.listing_linkage_status === 'EXACT_PUBLISHED_SOURCE_LINKAGE'
@@ -79,7 +80,9 @@ function sanitizeDealerProfile(profile) {
     groups,
     group_details_status: groups.length > 0
       ? 'PUBLISHED_DETAILS'
-      : groupCount > 0
+      : groupCount === null
+        ? 'UNAVAILABLE'
+        : groupCount > 0
         ? 'COUNT_ONLY'
         : 'NO_PUBLISHED_DETAILS',
   };
@@ -164,7 +167,8 @@ module.exports = async function handler(req, res) {
       for (const listing of safe.listings) {
         if (typeof listing.seller_name === 'string') listing.seller_name = redactPublicContactEvidence(listing.seller_name);
         listing.display_price = Number(listing.price_raw) > 0 && listing.currency
-          ? `${listing.currency} ${Number(listing.price_raw).toLocaleString('en-US')}` : null;
+          ? `${listing.currency} ${Number(listing.price_raw).toLocaleString('en-US')}`
+          : typeof listing.source_price_text === 'string' ? redactPublicContactEvidence(listing.source_price_text) : null;
       }
       safe.next_cursor = hasMore ? Buffer.from(JSON.stringify({identity,revision:profile.publication_revision,after:safe.listings.at(-1).id})).toString('base64url') : null;
       for (const review of safe.reviews || []) {
@@ -175,7 +179,8 @@ module.exports = async function handler(req, res) {
         if (typeof group.name === 'string') group.name = redactPublicContactEvidence(group.name);
       }
       return res.status(200).json({ success: true, ...safe, raw_message_access: true,
-        source_provenance: { source_system: 'WATCHFACTS_VERIFIED_DEALERS', current_counts_are_dynamic: true } });
+        source_provenance: { source_system: safe.dealer.source_system, current_counts_are_dynamic: true,
+          current_counts_scope: safe.stats?.current_counts_scope ?? null } });
     }
     const { data: canonicalProfile, error: canonicalError } = await client.rpc('qnsa_dealer_profile', {
       p_identity: identity,

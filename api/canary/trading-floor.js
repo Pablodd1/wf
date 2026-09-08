@@ -13,6 +13,7 @@ const {
 const { enforceListingDisplayContract } = require("../_lib/canary-display-contract.cjs");
 const { withExistingCardFields } = require("../_lib/canary-card-fields.cjs");
 const { assertDiscoveryOrder } = require("../_lib/canary-discovery.cjs");
+const { assertSourceImageOrder } = require("../_lib/canary-source-image-order.cjs");
 
 const ALLOWED_QUERY_PARAMS = new Set([
   "pagination",
@@ -30,6 +31,7 @@ const ALLOWED_QUERY_PARAMS = new Set([
   "category",
   "item",
   "country",
+  "countries",
   "region",
   "regions",
   "images",
@@ -117,11 +119,11 @@ module.exports = async function handler(req, res) {
     // fingerprint is computed from the exact normalized values used by the RPC.
     const cursorStr = query.cursor || null;
     if (query.sort !== undefined && typeof query.sort !== "string") return res.status(400).json({ error: "Invalid sort parameter" });
-    const sort = query.sort === undefined ? "newest" : query.sort.trim().toLowerCase();
-    if (!["newest", "discovery"].includes(sort)) return res.status(400).json({ error: "Invalid sort parameter" });
+    const sort = query.sort === undefined ? "source_images" : query.sort.trim().toLowerCase();
+    if (!["source_images", "newest", "discovery"].includes(sort)) return res.status(400).json({ error: "Invalid sort parameter" });
     // Keep existing default cursor scope byte-identical; alternate ordering is
     // explicitly bound so a cursor cannot switch order partway through traversal.
-    const orderingScope = sort === "discovery" ? { sort } : {};
+    const orderingScope = sort !== "newest" ? { sort } : {};
 
     // Validate intent / type if provided
     const rawIntent = query.intent !== undefined && query.intent !== null ? query.intent : query.type;
@@ -146,7 +148,17 @@ module.exports = async function handler(req, res) {
       ? String(rawCategory).trim().toLowerCase()
       : null;
 
-    const countryFilter = query.country ? String(query.country).trim() : null;
+    let countryFilter = query.country ? String(query.country).trim() : null;
+    if (query.countries !== undefined) {
+      try {
+        if (query.country !== undefined || typeof query.countries !== "string") throw new TypeError();
+        const countries = JSON.parse(query.countries);
+        if (!Array.isArray(countries) || countries.length > 50 || countries.some(value => typeof value !== "string" || !value.trim() || value.length > 200)) throw new TypeError();
+        countryFilter = countries.length ? JSON.stringify([...new Set(countries.map(value => value.trim()))].sort()) : null;
+      } catch {
+        return res.status(400).json({ error: "Invalid countries parameter" });
+      }
+    }
     let regionFilter = query.region ? String(query.region).trim() : null;
     if (query.regions !== undefined) {
       try {
@@ -254,14 +266,17 @@ module.exports = async function handler(req, res) {
     };
 
     // Phase 5.1 + RC50 F2: v4 returns frozen membership key columns (k_*) + payload jsonb frozen at snapshot-open time.
-    const { data, error } = await supabase.rpc(sort === "discovery" ? "get_trading_floor_discovery_keyset_v1" : "get_trading_floor_canary_keyset_v4", rpcParams);
+    const rpc = sort === "source_images" ? "get_trading_floor_source_images_keyset_v1"
+      : sort === "discovery" ? "get_trading_floor_discovery_keyset_v1" : "get_trading_floor_canary_keyset_v4";
+    const { data, error } = await supabase.rpc(rpc, rpcParams);
     if (error) {
       const cursorFault = mapSnapshotRpcError(error);
       if (cursorFault) throw cursorFault;
       throw error;
     }
     // Order assertion compares the FROZEN membership columns (k_*).
-    if (sort === "discovery") assertDiscoveryOrder(data || []);
+    if (sort === "source_images") assertSourceImageOrder(data || []);
+    else if (sort === "discovery") assertDiscoveryOrder(data || []);
     else assertKeysetOrder(data || []);
 
     // Enforce canonical ListingDisplayContract and redact public text.

@@ -147,7 +147,7 @@ export default function DealerDirectory() {
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
                 {dealer.verified_phone && <p className="mt-2 font-mono text-xs text-white/55">{dealer.verified_phone}</p>}
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/60">
-                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? (Number(dealer.review_count || 0) > 0 ? `Rated · ${Number(dealer.review_count).toLocaleString()} reviews` : 'Not rated') : `★ ${Number(dealer.rating).toFixed(1)} (${Number(dealer.review_count || 0).toLocaleString()})`}</span>
+                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? (Number(dealer.review_count || 0) > 0 ? `${Number(dealer.review_count).toLocaleString()} reviews` : 'Not rated') : `★ ${Number(dealer.rating).toFixed(1)} (${Number(dealer.review_count || 0).toLocaleString()})`}</span>
                   {dealer.trust_status && <span>{dealer.trust_status}</span>}
                   <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count == null ? 'Groups not captured' : dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} groups` : 'No published groups'}</span>
                   <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.member_since || (dealer.verified_at ? `Verified ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable')}</span>

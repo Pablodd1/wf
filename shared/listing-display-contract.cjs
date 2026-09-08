@@ -666,7 +666,9 @@ function buildListingDisplayRecord(input, mode) {
   }
 
   // Image resolution & evidence type
-  const imageKey = staged.image_key ? String(staged.image_key).trim() : null;
+  // Expanded publication children are deliberately text-only. Parent media
+  // stays in immutable parent evidence, even if a stale proposal supplied it.
+  const imageKey = !isChild && staged.image_key ? String(staged.image_key).trim() : null;
   const candidateUrl = constructCandidateImageUrl(imageKey);
   const isReachable = staged.image_reachable !== undefined ? staged.image_reachable
     : ['SOURCE_IMAGE_UNAVAILABLE', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'].includes(staged.image_status)
@@ -871,8 +873,23 @@ function buildListingDisplayRecord(input, mode) {
   record.seller_name = sellerDisplayName;
   record.imageUrl = imageUrl;
   record.listing_type = intent;
-  record.bundle_status = isBundle ? 'BUNDLE_PARENT_HELD' : 'SINGLE_LISTING';
+  record.bundle_status = isChild ? 'BUNDLE_CHILD' : isBundle ? 'BUNDLE_PARENT_HELD' : 'SINGLE_LISTING';
+  if (isChild) {
+    record.image_urls = [];
+    record.images = [];
+    record.gallery = [];
+    record.primary_image_key = null;
+    record.primary_image_url = null;
+    record.thumbnail = null;
+  }
   record.raw_message_available = Boolean(rawMessageText);
+  record.source_listing_status = typeof staged.source_listing_status === 'string' && staged.source_listing_status.trim()
+    ? staged.source_listing_status.trim() : null;
+  record.source_deleted = typeof staged.source_deleted === 'boolean' ? staged.source_deleted : null;
+  record.source_created_at_text = typeof staged.source_created_at_text === 'string' && staged.source_created_at_text.trim()
+    ? staged.source_created_at_text : null;
+  record.original_price_role = ['ASKING_PRICE', 'WTS_ASK', 'WTB_BUDGET'].includes(staged.original_price_role)
+    ? staged.original_price_role : null;
   record.price_display_verified = isVerifiedUsd;
   record.price_evidence_status = priceEvidenceStatus;
   record.image_reachable = isReachable;
