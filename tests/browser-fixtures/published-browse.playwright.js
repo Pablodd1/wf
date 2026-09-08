@@ -16,7 +16,6 @@ async page => {
   let slowBrand = '';
   await page.route('**/api/**', async route => {
     const [pathname, query = ''] = route.request().url().replace(/^https?:\/\/[^/]+/, '').split('?');
-    if (pathname === '/api/dictionaries/published-brand-aliases.json') return route.continue();
     const values = Object.fromEntries(query.split('&').filter(Boolean).map(pair => pair.split('=').map(part => decodeURIComponent(part.replace(/\+/g, ' ')))));
     const url = { pathname, search: '?' + query, searchParams: { get: key => values[key], has: key => key in values } };
     calls.push(url.pathname + url.search);

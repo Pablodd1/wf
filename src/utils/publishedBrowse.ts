@@ -1,4 +1,4 @@
-import publishedBrandAliases from '../../api/dictionaries/published-brand-aliases.json';
+import publishedBrandAliases from '../../shared/published-brand-aliases.json';
 
 export function publishedBrowseBrand(value: string): string {
   const aliases: Record<string, string> = publishedBrandAliases;

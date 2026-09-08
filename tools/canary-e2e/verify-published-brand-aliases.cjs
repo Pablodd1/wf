@@ -40,7 +40,7 @@ async function main(){
     assert.equal((await db.query('SELECT * FROM public.get_price_research_canary_keyset_v4($1,100,p_brand=>$2)',[research,brand])).rows.length,4);
     assert.equal(Number((await db.query('SELECT public.get_trading_floor_snapshot_count($1,p_query=>$2) n',[trading,'Rolex'])).rows[0].n),4);
    }
-   const aliases=require('../../api/dictionaries/published-brand-aliases.json');
+   const aliases=require('../../shared/published-brand-aliases.json');
    for(const [input,expected] of Object.entries(aliases))assert.equal((await db.query('SELECT wf_canonical_staging.published_browse_brand_v1($1) result',[input])).rows[0].result,expected);
    for(const role of ['anon','authenticated','service_role'])assert.equal((await db.query("SELECT has_function_privilege($1,'wf_canonical_staging.published_browse_brand_v1(text)','EXECUTE') ok",[role])).rows[0].ok,false);
    assert.deepEqual(await frozen(),before,'Frozen source payloads and original cache entries changed');
