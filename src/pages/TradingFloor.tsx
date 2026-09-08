@@ -495,6 +495,8 @@ export default function TradingFloor() {
   const [releaseBrands, setReleaseBrands] = useState<string[]>(canaryBrowseEnabled ? [] : MASTER_BRAND_LIST);
   const browseSnapshotRef = useRef<string | undefined>(undefined);
   const [modelOptions, setModelOptions] = useState<CatalogModelOption[]>([]);
+  const [browseError, setBrowseError] = useState(false);
+  const [browseAttempt, setBrowseAttempt] = useState(0);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
@@ -593,6 +595,7 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setBrowseError(false);
     if (canaryBrowseEnabled) {
       setModelOptions([]);
       void loadPublishedBrowse('trading_floor', brandFilter, '', controller.signal, browseSnapshotRef.current)
@@ -603,7 +606,11 @@ export default function TradingFloor() {
           setModelOptions(payload.models);
           setDiscoveredLocations(payload.availableRegions || []);
         })
-        .catch(error => { if (error?.name !== 'AbortError') setModelOptions([]); });
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setModelOptions([]);
+          setBrowseError(true);
+        });
       return () => controller.abort();
     }
     if (!brandFilter) {
@@ -619,7 +626,7 @@ export default function TradingFloor() {
         if (error?.name !== 'AbortError') setModelOptions([]);
       });
     return () => controller.abort();
-  }, [brandFilter]);
+  }, [brandFilter, browseAttempt]);
 
   const openListing = useCallback((listing: ListingRecord) => {
     listScrollPositionRef.current = window.scrollY;
@@ -1055,6 +1062,8 @@ export default function TradingFloor() {
           model={modelFilter}
           models={modelOptions}
           browseSnapshot={browseSnapshotRef.current}
+          browseError={browseError}
+          onBrowseRetry={() => setBrowseAttempt(value => value + 1)}
           category={categoryFilter}
           intent={intentFilter}
           sort={sortMode}
@@ -1087,6 +1096,12 @@ export default function TradingFloor() {
           </span>
           <span>{t('Priced listings first; source images next; highest verified USD price within each group.')}</span>
           {error && <span style={{ color: RED }}>{error}</span>}
+          {browseError && (
+            <span role="alert" style={{ color: RED }}>
+              {t("Watch filters couldn't load.")}{' '}
+              <button type="button" aria-label="Retry watch filters" onClick={() => setBrowseAttempt(value => value + 1)} className="font-semibold underline">{t('Retry')}</button>
+            </span>
+          )}
         </div>
 
         {selectedListing ? (
@@ -1462,6 +1477,8 @@ function MobileFilterSheet({
   model,
   models,
   browseSnapshot,
+  browseError,
+  onBrowseRetry,
   category,
   intent,
   sort,
@@ -1477,6 +1494,8 @@ function MobileFilterSheet({
   model: string;
   models: CatalogModelOption[];
   browseSnapshot?: string;
+  browseError: boolean;
+  onBrowseRetry: () => void;
   category: CategoryFilter;
   intent: IntentFilter;
   sort: SortMode;
@@ -1491,6 +1510,8 @@ function MobileFilterSheet({
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftModel, setDraftModel] = useState(model);
   const [draftModels, setDraftModels] = useState(models);
+  const [draftModelsError, setDraftModelsError] = useState(false);
+  const [draftBrowseAttempt, setDraftBrowseAttempt] = useState(0);
   const draftBrowseSnapshotRef = useRef(browseSnapshot);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
@@ -1502,6 +1523,7 @@ function MobileFilterSheet({
 
   useEffect(() => {
     const controller = new AbortController();
+    setDraftModelsError(false);
     if (draftBrand === brand) {
       setDraftModels(models);
       return () => controller.abort();
@@ -1515,17 +1537,25 @@ function MobileFilterSheet({
           draftBrowseSnapshotRef.current = payload.snapshot_id;
           setDraftModels(payload.models);
         })
-        .catch(error => { if (error?.name !== 'AbortError') setDraftModels([]); });
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setDraftModels([]);
+          setDraftModelsError(true);
+        });
     } else {
       fetch(`/api/catalog-models?brand=${encodeURIComponent(draftBrand)}`, { signal: controller.signal })
         .then(async response => response.ok ? response.json() : null)
         .then(payload => {
           if (!controller.signal.aborted) setDraftModels(Array.isArray(payload?.models) ? payload.models : []);
         })
-        .catch(error => { if (error?.name !== 'AbortError') setDraftModels([]); });
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setDraftModels([]);
+          setDraftModelsError(true);
+        });
     }
     return () => controller.abort();
-  }, [brand, draftBrand, models]);
+  }, [brand, draftBrand, models, draftBrowseAttempt]);
 
   const filteredMobileLocations = useMemo(() => {
     const q = mobileLocationSearch.trim().toLowerCase();
@@ -1561,6 +1591,12 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
+          {browseError && (
+            <div role="alert" className="text-sm" style={{ color: RED }}>
+              {t("Watch filters couldn't load.")}{' '}
+              <button type="button" aria-label="Retry watch filters" onClick={onBrowseRetry} className="font-semibold underline">{t('Retry')}</button>
+            </div>
+          )}
           <FilterGroup label={t('Order')}>
             {SORT_OPTIONS.map(option => (
               <FilterChoice key={option.value} active={draftSort === option.value} label={t(option.label)} onClick={() => setDraftSort(option.value)} />
@@ -1600,6 +1636,12 @@ function MobileFilterSheet({
               <option value="">All models</option>
               {draftModels.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
+            {draftModelsError && (
+              <div role="alert" className="mt-2 text-xs" style={{ color: RED }}>
+                {t("Models couldn't load.")}{' '}
+                <button type="button" aria-label="Retry models" onClick={() => setDraftBrowseAttempt(value => value + 1)} className="font-semibold underline">{t('Retry')}</button>
+              </div>
+            )}
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
             {draftLocations.length > 0 && (

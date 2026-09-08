@@ -15,6 +15,8 @@ async page => {
   const calls = [];
   const same = (left, right) => String(left || '').toLowerCase() === String(right || '').toLowerCase();
   let slowBrand = '';
+  let failInitialBrowse = true;
+  let failModelBrand = '';
   await page.route('**/api/**', async route => {
     const [pathname, query = ''] = route.request().url().replace(/^https?:\/\/[^/]+/, '').split('?');
     const values = Object.fromEntries(query.split('&').filter(Boolean).map(pair => pair.split('=').map(part => decodeURIComponent(part.replace(/\+/g, ' ')))));
@@ -24,6 +26,10 @@ async page => {
     if (url.pathname === '/api/canary/browse') {
       const brand = url.searchParams.get('brand');
       const model = url.searchParams.get('model');
+      if ((failInitialBrowse && !brand) || (failModelBrand && brand === failModelBrand)) {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false }) });
+        return;
+      }
       let members = brand ? rows.filter(item => same(item.brand, brand)) : rows;
       const models = group(members, 'model');
       if (model) members = members.filter(item => same(item.model || 'Reference-only listings', model));
@@ -43,6 +49,17 @@ async page => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('http://127.0.0.1:5187/#/trading');
   await page.locator('article[data-listing-id]').nth(49).waitFor();
+  await page.getByRole('alert').filter({ hasText: "Watch filters couldn't load." }).waitFor();
+  const initialIds = await page.locator('article[data-listing-id]').evaluateAll(items => items.map(item => item.dataset.listingId));
+  const inventoryCalls = () => calls.filter(path => path.startsWith('/api/canary/trading-floor?') && path.includes('pageSize=50')).length;
+  const beforeRetryInventoryCalls = inventoryCalls();
+  if (await page.locator('#brand-filter option').count() !== 1) throw new Error('Failed initial browse concealed by unrelated brand options');
+  failInitialBrowse = false;
+  await page.getByRole('button', { name: 'Retry watch filters', exact: true }).click();
+  await page.waitForFunction(expected => document.querySelectorAll('#brand-filter option').length === expected + 1, brands.length);
+  await page.getByRole('alert').filter({ hasText: "Watch filters couldn't load." }).waitFor({ state: 'hidden' });
+  for (const region of regions) await page.getByRole('checkbox', { name: region, exact: true }).waitFor();
+  if (inventoryCalls() !== beforeRetryInventoryCalls || JSON.stringify(initialIds) !== JSON.stringify(await page.locator('article[data-listing-id]').evaluateAll(items => items.map(item => item.dataset.listingId)))) throw new Error('Browse-only retry reset inventory');
   const options = await page.locator('#brand-filter option').evaluateAll(items => items.map(item => item.value).filter(Boolean));
   if (JSON.stringify(options.slice().sort()) !== JSON.stringify(brands.map(item => item.brand).sort())) throw new Error('Population brands incomplete');
   const ids = () => page.locator('article[data-listing-id]').evaluateAll(items => items.map(item => item.dataset.listingId));
@@ -127,10 +144,16 @@ async page => {
   // Draft brand selection must load its models before applying the sheet. A
   // delayed previous brand must never replace the currently selected options.
   slowBrand = 'Rolex';
+  failModelBrand = 'Patek Philippe';
   await sheet.getByRole('button', { name: 'Rolex', exact: true }).click();
   await sheet.getByRole('button', { name: 'Patek Philippe', exact: true }).click();
   const mobileModels = page.locator('#mobile-model-filter');
+  await sheet.getByRole('alert').filter({ hasText: "Models couldn't load." }).waitFor();
+  if (await mobileModels.locator('option').count() !== 1) throw new Error('Failed new-brand browse retained another brand models');
+  failModelBrand = '';
+  await sheet.getByRole('button', { name: 'Retry models', exact: true }).click();
   await page.waitForFunction(expected => JSON.stringify(Array.from(document.querySelectorAll('#mobile-model-filter option'), option => option.value).filter(Boolean).sort()) === JSON.stringify(expected), expectedModels.map(item => item.model).sort());
+  await sheet.getByRole('alert').filter({ hasText: "Models couldn't load." }).waitFor({ state: 'hidden' });
   await page.waitForTimeout(800);
   const finalMobileModels = await mobileModels.locator('option').evaluateAll(items => items.map(item => item.value).filter(Boolean).sort());
   if (JSON.stringify(finalMobileModels) !== JSON.stringify(expectedModels.map(item => item.model).sort())) throw new Error('Stale mobile draft models');
@@ -147,7 +170,7 @@ async page => {
   if (await mobileModels.inputValue() !== '') throw new Error('Clear all retained mobile model');
   await sheet.getByRole('button', { name: 'View results', exact: true }).click();
   await page.waitForFunction(() => !new URLSearchParams(location.hash.split('?')[1]).has('model'));
-  const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
+  const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, initial_browse_failure_visible_and_retry_recovers: true, browse_retry_preserves_inventory: true, mobile_model_failure_visible_and_retry_recovers: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
   return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true, exact_alias_deep_link_brand_model_reference: true, case_only_url_selects_without_scope_rewrite: true };
 }
 
