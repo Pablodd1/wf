@@ -136,7 +136,7 @@ BEGIN
    IF p_fx_hash IS DISTINCT FROM reviewed_price->>'fx_evidence_hash' THEN RAISE EXCEPTION 'literal_price_materialization_fx_changed' USING ERRCODE='22023'; END IF;
    d=d||jsonb_build_object('original_price_amount',reviewed_price->'original_price_amount','original_price_currency',reviewed_price->'original_price_currency',
     'currency_status',CASE reviewed_price->>'original_price_currency' WHEN 'USD' THEN 'VERIFIED_EXPLICIT_USD' ELSE 'VERIFIED_EXPLICIT_CURRENCY' END);
-   reasons=reasons-'CURRENCY_AMBIGUOUS'-'CURRENCY_NOT_DETECTED'-'FX_UNRESOLVED_HELD'-'MULTIPLE_PRICE_AMBIGUITY';
+   reasons=reasons-'MISSING_PRICE_OR_CURRENCY'-'AMBIGUOUS_BARE_DOLLAR_HELD';
   END IF;
 $price$||needle);
  needle=' evidence=jsonb_build_object(''contract'',''wf-private-single-materialization-v2''';
