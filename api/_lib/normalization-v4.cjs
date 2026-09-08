@@ -251,7 +251,7 @@ function extractPriceCandidates(text, context = {}) {
   };
 
   const leftCurrency = new RegExp(`(?<![A-Za-z])(${PRICE_CURRENCY_TOKEN})\\s*[:=]?\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
-  const rightCurrency = new RegExp(`(?<![A-Za-z0-9])(?!19\\d{2}\\s*[,;]|20\\d{2}\\s*[,;])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?\\s*(${PRICE_CURRENCY_TOKEN})`, 'gi');
+  const rightCurrency = new RegExp(`(?<![A-Za-z0-9])(?!19\\d{2}\\s*[,;]|20\\d{2}\\s*[,;])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?\\s*(${PRICE_CURRENCY_TOKEN})(?![A-Za-z0-9])`, 'gi');
 
   // Run HK$ prefix recognition independently. In a slash-separated equivalent
   // pair, the generic alternation can otherwise begin at the bare `$` and lose

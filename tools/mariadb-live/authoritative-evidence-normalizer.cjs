@@ -78,12 +78,85 @@ function resolveSourceTextEvidence(stagedRow) {
  * Returns 'WTS' | 'WTB' | null (if unknown/ambiguous)
  */
 function resolveStrictIntentFromText(text) {
-  if (!text || typeof text !== 'string') return null;
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  const explicit = explicitIntent(trimmed);
-  if (explicit === 'WTB' || explicit === 'WTS') return explicit;
-  return null;
+  return resolveLiteralIntentEvidence(text).intent;
+}
+
+// Parsing copies never replace the original text or its source hash. Only literal
+// intent formatting is repaired here; prices, dates and condition keep their own
+// unchanged source-text extraction paths.
+function resolveLiteralIntentEvidence(text) {
+  const original = typeof text === 'string' ? text.trim() : '';
+  if (!original) return { intent: null, rules: [], attached_reference: null };
+  let derived = original.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '');
+  const rules = derived !== original ? ['UNICODE_INTENT_FORMATTING'] : [];
+  const spaced = /^[^\p{L}\p{N}]*(W[ \t]+T[ \t]+[BS])(?=$|[\s:;,!?-])/iu.exec(derived);
+  if (spaced) {
+    derived = derived.slice(0, spaced[0].length - spaced[1].length)
+      + spaced[1].replace(/[ \t]/g, '').toUpperCase() + derived.slice(spaced[0].length);
+    rules.push('ANCHORED_SPACED_INTENT_HEADER');
+  }
+
+  let attachedReference = null;
+  const attached = /^[^\p{L}\p{N}]*NTQ(\d[A-Z0-9]*(?:[./-][A-Z0-9]+)*)(?=$|[^A-Z0-9./-])/iu.exec(derived);
+  if (attached) {
+    const token = attached[1];
+    const extracted = extractReference(token);
+    const tail = derived.slice(attached[0].length);
+    const otherReferences = (tail.match(/[A-Z0-9]+(?:[./-][A-Z0-9]+)*/gi) || [])
+      .filter(value => /\d/.test(value) && extractReference(value));
+    const multipleQuantity = /\b(?:[2-9]\d*\s*(?:pcs?|pieces?|units?|watches)|qty\s*[:=]?\s*[2-9]\d*)\b|[x×]\s*[2-9]\d*\b/i.test(tail);
+    // A truncated token or another possible reference needs review. This also
+    // deliberately rejects uncertain numeric prices rather than guessing.
+    if (extracted && extracted.toUpperCase() === token.toUpperCase()
+        && inferBrandFromReference(extracted) && otherReferences.length === 0 && !multipleQuantity) {
+      derived = derived.slice(0, attached[0].length - token.length) + ' '
+        + derived.slice(attached[0].length - token.length);
+      attachedReference = token;
+      rules.push('ANCHORED_ATTACHED_NTQ_EXACT_REFERENCE');
+    }
+  }
+  const intent = explicitIntent(derived);
+  return {
+    intent: intent === 'WTB' || intent === 'WTS' ? intent : null,
+    rules,
+    source_text_sha256: sha256(original),
+    derived_text_sha256: sha256(derived),
+    attached_reference: intent === 'WTB' ? attachedReference : null
+  };
+}
+
+function literalIntentRecoveryReviewReasons(text, reference, brand, evidence) {
+  if (!reference) return [];
+  // This broader formatting removal is validation only. It can reveal that an
+  // existing extracted reference was truncated; it never supplies a replacement.
+  let validationText = String(text || '').normalize('NFKC').replace(/\p{Cf}/gu, '');
+  if (evidence.attached_reference) validationText = validationText.replace(/^([^\p{L}\p{N}]*NTQ)(?=\d)/iu, '$1 ');
+  const tokens = validationText.match(/[A-Z0-9]+(?:[./-][A-Z0-9]+)*/gi) || [];
+  const reasons = [];
+  // An attached NTQ reference establishes the requested token, not its maker.
+  // Keep the diagnostic reference without promoting inferred brand provenance.
+  if (evidence.attached_reference && !BRAND_HEADERS.some(([pattern, name]) =>
+    name === brand && pattern.test(validationText))) {
+    reasons.push('RECOVERED_INTENT_MANUFACTURER_SOURCE_EVIDENCE_MISSING');
+  }
+  if (!tokens.some(token => token.toUpperCase() === reference.toUpperCase())) {
+    reasons.push('RECOVERED_INTENT_REFERENCE_TOKEN_INCOMPLETE');
+  }
+  const references = tokens.filter(token => {
+    const extracted = extractReference(token);
+    return (extracted && inferBrandFromReference(extracted))
+      || (brand === 'Patek Philippe' && /^[34567]\d{3}[A-Z]{0,2}$/i.test(token));
+  });
+  if (new Set(references.map(token => token.toUpperCase())).size > 1
+      || /\ball\s+(?:models?|references?)\b/i.test(validationText)
+      || /\b(?:[2-9]\d*\s*(?:pcs?|pieces?|units?|watches)|qty\s*[:=]?\s*[2-9]\d*)\b|[x×]\s*[2-9]\d*\b/i.test(validationText)) {
+    reasons.push('RECOVERED_INTENT_MULTIPLE_WATCHES_REVIEW');
+  }
+  if (/^\d{5,6}$/.test(reference)) {
+    const suffix = new RegExp('\\b' + reference + '[ \\t]+(?:LN|LB|LV|BLRO|BLNR|CHNR|GRNR|RBOW)\\b', 'i');
+    if (suffix.test(validationText)) reasons.push('RECOVERED_INTENT_REFERENCE_SUFFIX_REVIEW');
+  }
+  return reasons;
 }
 
 /**
@@ -156,7 +229,10 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   const sourceObservedAt = stagedRow.captured_at || stagedRow.source_created_on || null;
 
   // 4. Intent Extraction: EXCLUSIVELY from listing_text_evidence
-  const intent = hasTextEvidence ? resolveStrictIntentFromText(listingTextEvidence) : null;
+  const intentEvidence = resolveLiteralIntentEvidence(listingTextEvidence);
+  const intent = intentEvidence.intent;
+  const literalIntentChanged = intent !== explicitIntent(listingTextEvidence || '')
+    || intentEvidence.attached_reference !== null;
 
   // 5. Multi-Offer Segmentation & Bundle Lineage
   const candidates = hasTextEvidence ? segmentDealerMessage(listingTextEvidence) : [];
@@ -172,7 +248,10 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   let model = null;
   let modelSourceEvidence = null;
 
-  if (candidates.length === 1 && candidates[0].reference) {
+  if (!isBundle && intentEvidence.attached_reference) {
+    reference = intentEvidence.attached_reference;
+    referenceSourceEvidence = 'listing_text_attached_ntq_exact_reference';
+  } else if (candidates.length === 1 && candidates[0].reference) {
     reference = candidates[0].reference;
     referenceSourceEvidence = 'listing_text_candidate_reference';
   } else if (!isBundle && hasTextEvidence) {
@@ -208,6 +287,8 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     model = String(raw.model).trim();
     modelSourceEvidence = 'source_metadata_model';
   }
+  const literalRecoveryReasons = literalIntentChanged
+    ? literalIntentRecoveryReviewReasons(listingTextEvidence, reference, brand, intentEvidence) : [];
 
   let dialColor = hasTextEvidence ? normalizeWatchDial(null, listingTextEvidence) : null;
   if (dialColor) {
@@ -332,6 +413,10 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
     reviewFlags.push('INCOMPLETE_IDENTITY');
     exclusionReasons.push('IDENTITY_UNRECOGNIZED');
+  } else if (literalRecoveryReasons.length > 0) {
+    tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
+    reviewFlags.push('RECOVERED_INTENT_IDENTITY_REQUIRES_REVIEW');
+    exclusionReasons.push(...literalRecoveryReasons);
   } else if (intent === 'WITHDRAWN') {
     tradingFloorStatus = 'HELD_WITHDRAWN';
     exclusionReasons.push('LISTING_WITHDRAWN');
@@ -389,7 +474,9 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     reconciliationCategory = 'REVIEW_REQUIRED';
   }
 
-  const parserVersion = 'authoritative-normalizer-v11-category-bound';
+  const parserVersion = literalIntentChanged
+    ? 'authoritative-normalizer-v12-literal-intent'
+    : 'authoritative-normalizer-v11-category-bound';
 
   const contractObj = {
     source_id: sourceId,
@@ -447,6 +534,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   };
 
   validateNormalizationStatuses(contractObj);
+  if (literalIntentChanged) contractObj.intent_parsing_evidence = intentEvidence;
   contractObj.proposal_hash = computeProposalHash(contractObj);
   return contractObj;
 }
@@ -1039,6 +1127,7 @@ module.exports = {
   DEFAULT_NYC3_BASE,
   resolveSourceTextEvidence,
   resolveStrictIntentFromText,
+  resolveLiteralIntentEvidence,
   extractYearFromText,
   segmentDealerMessage,
   extractReference,
