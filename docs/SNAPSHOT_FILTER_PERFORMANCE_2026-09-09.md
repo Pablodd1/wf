@@ -25,6 +25,6 @@ Evidence SHA-256:
 | --- | --- |
 | Actual seed and snapshot-only scale | `c5e2fe9cf8c6af6786094b7def419c5fec4f0458ed29e238dd435a106e4c57e1` |
 | Monotonic forced-plan comparison | `f412dc9d81872c7c6bd321f06902a4e56e7cb03d52f1d6ab4674987e6fff01f1` |
-| Exact installer contract and rollback | `57b18fb0a4990eefeb162e7eda2d23a02be744de1f0b1a949c4c52966ae5bc05` |
+| Exact installer contract and rollback, with production service-role-only ACLs | `ce8c672a5ccef85b25a25bf49d7c01f51c6c0fd06a12c35d55897fc738e90415` |
 
 PostgreSQL documents the distinction between parameter-specific and generic cached plans in its [query planning settings](https://www.postgresql.org/docs/17/runtime-config-query.html#GUC-PLAN-CACHE-MODE).
