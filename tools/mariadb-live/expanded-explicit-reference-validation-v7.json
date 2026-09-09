@@ -1,0 +1,17 @@
+{
+  "contract": "WF_EXPLICIT_SOURCE_REFERENCE_VALIDATION_V1",
+  "reviewed_on": "2026-09-09",
+  "purpose": "Validate only a manufacturer and complete reference already explicit in the source message. Never supply listing price, currency, date, condition, dial, location, seller, or image.",
+  "entries": [
+    {
+      "brand": "Rolex",
+      "reference": "68274",
+      "model": "Datejust",
+      "source_files": [
+        "https://www.bucherer.com/de/en/rolex-certified-pre-owned/watches/datejust/1500-345-5.html",
+        "https://www.goldsmiths.co.uk/Rolex-Certified-Pre%2BOwned-Datejust-31-68274/p/406104936490"
+      ],
+      "evidence_scope": "Both first-party Rolex Certified Pre-Owned offers explicitly identify Rolex Datejust reference 68274. No attributes of those offered watches are copied into source listings."
+    }
+  ]
+}
