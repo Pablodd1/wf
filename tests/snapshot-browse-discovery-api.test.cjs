@@ -75,10 +75,10 @@ test.beforeEach(() => {
   respond = async name => assert.fail("Unexpected database access: " + name);
 });
 
-test("omitted and explicit default ordering keep the five-field RPC and legacy cursor scope", async () => {
+test("explicit newest ordering keeps the five-field RPC and legacy cursor scope", async () => {
   const rows = [row("b", 30000), row("c", 20000), row("a", 10000)];
   tradingReply(rows);
-  const implicit = await invoke(trading, { pageSize: "3" });
+  const implicit = await invoke(trading, { pageSize: "3", sort: " NEWEST " });
   const explicit = await invoke(trading, { pageSize: "3", sort: "newest" });
   for (const result of [implicit, explicit]) {
     assert.equal(result.status, 200);
@@ -190,12 +190,12 @@ test("multiple locations preserve comma-containing labels and bind a canonical s
 
 test("an empty location selection preserves the default scope and scalar labels remain intact", async () => {
   tradingReply([row("a", 10000)]);
-  const empty = await invoke(trading, { regions: "[]", pageSize: "1" });
+  const empty = await invoke(trading, { sort: "newest", regions: "[]", pageSize: "1" });
   assert.equal(empty.status, 200);
   assert.equal(JSON.parse(Buffer.from(empty.body.nextCursor, "base64url")).scope, computeCursorScope("trading_floor", FILTERS));
   assert.ok(calls.filter(call => !call.name.startsWith("open_")).every(call => call.params.p_region === null));
   calls.length = 0;
-  const scalar = await invoke(trading, { region: " New York, NY " });
+  const scalar = await invoke(trading, { sort: "newest", region: " New York, NY " });
   assert.equal(scalar.status, 200);
   for (const call of calls.filter(call => !call.name.startsWith("open_"))) {
     assert.deepEqual(JSON.parse(call.params.p_region), ["New York, NY"]);
@@ -217,7 +217,7 @@ test("malformed, excessive or conflicting location selections are rejected befor
     assert.deepEqual(calls, []);
   }
   tradingReply([]);
-  const maximum = await invoke(trading, { regions: JSON.stringify(Array.from({ length: 50 }, (_, index) => String(index).padEnd(200, "x"))) });
+  const maximum = await invoke(trading, { sort: "newest", regions: JSON.stringify(Array.from({ length: 50 }, (_, index) => String(index).padEnd(200, "x"))) });
   assert.equal(maximum.status, 200, "documented size limits remain inclusive");
 });
 

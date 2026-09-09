@@ -626,6 +626,7 @@ function listCatalogSuggestions(query, { brand = null, limit = 10 } = {}) {
 }
 
 module.exports = {
+  lookupExactCatalogModel: require('../../shared/exact-catalog-model-map.cjs').lookupExactCatalogModel,
   lookupCatalog,
   listEquivalentReferences,
   inferBrand,

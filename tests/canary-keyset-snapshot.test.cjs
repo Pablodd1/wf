@@ -43,7 +43,12 @@ require.cache[supabasePath] = {
   }
 };
 
-const tradingFloorHandler = require("../api/canary/trading-floor");
+const actualTradingFloorHandler = require("../api/canary/trading-floor");
+// These fixtures prove the explicitly selected legacy ordering and five-key
+// cursor remain compatible. The new omitted-sort contract has its own suite.
+const tradingFloorHandler = (req, res) => actualTradingFloorHandler({
+  ...req, query: { sort: "newest", ...(req.query || {}) },
+}, res);
 const priceResearchHandler = require("../api/canary/price-research");
 const {
   computeCursorScope,

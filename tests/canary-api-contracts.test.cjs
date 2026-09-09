@@ -315,6 +315,7 @@ test("Phase 1 & 2: API Contract and Parameter Validation Test Suite", async (t) 
         k_price_usd: fixtureRow.price_usd ?? null,
         k_source_created_at: fixtureRow.source_created_at,
         k_listing_id: fixtureRow.listing_id,
+        k_source_lane: 1,
         payload: fixtureRow
       }],
       error: null
