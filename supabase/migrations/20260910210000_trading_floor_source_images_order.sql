@@ -18,9 +18,11 @@ $$;
 REVOKE ALL ON FUNCTION wf_canonical_staging.trading_source_lane_v1(jsonb),
  wf_canonical_staging.trading_source_time_v1(timestamptz) FROM PUBLIC,anon,authenticated,service_role;
 
+-- Direct column expressions avoid per-row SQL helper calls during index builds.
+-- Keep the same expressions in the row seek and ORDER BY below.
 CREATE INDEX snapshot_source_images_order_v1 ON wf_canonical_staging.keyset_snapshot_members
- (snapshot_id,wf_canonical_staging.trading_source_lane_v1(payload),
-  wf_canonical_staging.trading_source_time_v1(source_created_at),listing_id COLLATE "C");
+ (snapshot_id,(CASE WHEN NULLIF(payload->>'parent_listing_id','') IS NOT NULL OR payload->>'child_index' IS NOT NULL OR payload->>'is_bundle'='true' THEN 3 WHEN payload->>'image_status'='SOURCE_IMAGE_PRESENT' AND NULLIF(btrim(payload->>'image_key'),'') IS NOT NULL THEN 1 ELSE 2 END),
+  (-extract(epoch FROM source_created_at AT TIME ZONE 'UTC')),listing_id COLLATE "C");
 
 -- Keep the existing scalar country contract; validated JSON arrays add OR
 -- within countries. Country and region dimensions remain separate AND filters.
@@ -84,7 +86,7 @@ BEGIN
    RAISE EXCEPTION 'invalid_cursor: key does not match frozen member' USING ERRCODE='22023'; END IF;
  END IF;
  RETURN QUERY SELECT m.priced_rank,m.image_rank,m.price_usd,m.source_created_at,m.listing_id,
-  wf_canonical_staging.trading_source_lane_v1(m.payload),m.payload
+  (CASE WHEN NULLIF(m.payload->>'parent_listing_id','') IS NOT NULL OR m.payload->>'child_index' IS NOT NULL OR m.payload->>'is_bundle'='true' THEN 3 WHEN m.payload->>'image_status'='SOURCE_IMAGE_PRESENT' AND NULLIF(btrim(m.payload->>'image_key'),'') IS NOT NULL THEN 1 ELSE 2 END),m.payload
  FROM wf_canonical_staging.keyset_snapshot_members m
  WHERE m.snapshot_id=wf_canonical_staging.snapshot_data_id(p_snapshot_id)
   AND (p_brand IS NULL OR lower(wf_canonical_staging.published_browse_brand_v1(m.payload->>'brand'))=lower(wf_canonical_staging.published_browse_brand_v1(p_brand)))
@@ -110,10 +112,10 @@ BEGIN
    OR lower(COALESCE(m.payload->>'source_context_text','')) LIKE '%'||lower(p_query)||'%'
    OR lower(COALESCE(m.payload->>'seller_display_name','')) LIKE '%'||lower(p_query)||'%')
   AND (NOT cursor_supplied OR
-   (wf_canonical_staging.trading_source_lane_v1(m.payload),wf_canonical_staging.trading_source_time_v1(m.source_created_at),m.listing_id COLLATE "C")
+   ((CASE WHEN NULLIF(m.payload->>'parent_listing_id','') IS NOT NULL OR m.payload->>'child_index' IS NOT NULL OR m.payload->>'is_bundle'='true' THEN 3 WHEN m.payload->>'image_status'='SOURCE_IMAGE_PRESENT' AND NULLIF(btrim(m.payload->>'image_key'),'') IS NOT NULL THEN 1 ELSE 2 END),(-extract(epoch FROM m.source_created_at AT TIME ZONE 'UTC')),m.listing_id COLLATE "C")
    > (wf_canonical_staging.trading_source_lane_v1(v_member.payload),wf_canonical_staging.trading_source_time_v1(p_cursor_created_at),p_cursor_listing_id COLLATE "C"))
- ORDER BY wf_canonical_staging.trading_source_lane_v1(m.payload),
-  wf_canonical_staging.trading_source_time_v1(m.source_created_at),m.listing_id COLLATE "C"
+ ORDER BY (CASE WHEN NULLIF(m.payload->>'parent_listing_id','') IS NOT NULL OR m.payload->>'child_index' IS NOT NULL OR m.payload->>'is_bundle'='true' THEN 3 WHEN m.payload->>'image_status'='SOURCE_IMAGE_PRESENT' AND NULLIF(btrim(m.payload->>'image_key'),'') IS NOT NULL THEN 1 ELSE 2 END),
+  (-extract(epoch FROM m.source_created_at AT TIME ZONE 'UTC')),m.listing_id COLLATE "C"
  LIMIT p_limit;
 END $function$;
 REVOKE ALL ON FUNCTION public.get_trading_floor_source_images_keyset_v1(uuid,integer,text,text,text,text,text,text,text,boolean,boolean,integer,integer,numeric,timestamptz,text) FROM PUBLIC,anon,authenticated;

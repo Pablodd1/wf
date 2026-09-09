@@ -9,6 +9,8 @@ const hash=value=>require('node:crypto').createHash('sha256').update(value).dige
 const root=path.resolve(__dirname,'../..');
 const migrationPath=path.join(root,'supabase/migrations/20260910210000_trading_floor_source_images_order.sql');
 const migration=fs.readFileSync(migrationPath,'utf8').replaceAll('\r\n','\n');
+const sourceLaneSql="(CASE WHEN NULLIF(payload->>'parent_listing_id','') IS NOT NULL OR payload->>'child_index' IS NOT NULL OR payload->>'is_bundle'='true' THEN 3 WHEN payload->>'image_status'='SOURCE_IMAGE_PRESENT' AND NULLIF(btrim(payload->>'image_key'),'') IS NOT NULL THEN 1 ELSE 2 END)";
+const sourceTimeSql="(-extract(epoch FROM source_created_at AT TIME ZONE 'UTC'))";
 const foundation=fs.readFileSync(path.join(root,'supabase/migrations/20260910160000_expanded_source_candidate_evidence.sql'),'utf8').replaceAll('\r\n','\n');
 const report={status:'RUNNING',started_at:new Date().toISOString(),synthetic_only:true,production_contacted:false,
  migration_sha256_lf:hash(migration),foundation_sha256_lf:hash(foundation),databases:[]};
@@ -24,7 +26,8 @@ async function main(){
   const host=binding?'127.0.0.1':info.NetworkSettings.Networks['wf-final-disposable']?.IPAddress;
   assert.ok(host==='127.0.0.1'||(process.platform==='linux'&&/^172\.18\.0\.[0-9]+$/.test(host)),'Only the inspected disposable Docker network is allowed');
   const env=Object.fromEntries(info.Config.Env.map(value=>[value.slice(0,value.indexOf('=')),value.slice(value.indexOf('=')+1)]));
-  const database='wf_expanded_product_test_20260908';
+  const database=process.env.WF_PRODUCT_ORDER_DATABASE||'wf_expanded_product_test_20260908';
+  assert.match(database,/^wf_expanded_product_[a-z0-9_]+$/,'Only an explicitly named disposable product database is allowed');
   const db=new Client({host,port:binding?Number(binding.HostPort):5432,user:'postgres',password:env.POSTGRES_PASSWORD,database});
   await db.connect();
   try {
@@ -35,6 +38,17 @@ async function main(){
     (SELECT count(*) FROM wf_canonical_staging.keyset_snapshot_members)::text members`)).rows[0];
    const before=await state();assert.deepEqual(before,{raw:'0',published:'0',members:'0'},'Schema-only test database required');
    await db.query(strip(foundation));await db.query(strip(migration));
+   const indexDefinition=(await db.query("SELECT pg_get_indexdef(indexrelid) definition,indisvalid,indisready FROM pg_index WHERE indexrelid='wf_canonical_staging.snapshot_source_images_order_v1'::regclass")).rows[0];
+   assert.equal(indexDefinition.indisvalid,true);assert.equal(indexDefinition.indisready,true);
+   const equivalence=(await db.query(`WITH edge(payload,source_created_at) AS (VALUES
+    ('{}'::jsonb,NULL::timestamptz),('null'::jsonb,'0001-01-01 UTC'::timestamptz),
+    ('{"image_status":"SOURCE_IMAGE_PRESENT","image_key":" "}'::jsonb,'1960-01-01 UTC'::timestamptz),
+    ('{"image_status":"SOURCE_IMAGE_PRESENT","image_key":"original","child_index":0}'::jsonb,'2026-09-01 00:00:00.123456 UTC'::timestamptz),
+    ('{"image_status":"SOURCE_IMAGE_PRESENT","image_key":"original","parent_listing_id":""}'::jsonb,'2026-09-01 00:00:00.123455 UTC'::timestamptz),
+    ('{"image_status":"SOURCE_IMAGE_PRESENT","image_key":"original","is_bundle":true}'::jsonb,'2026-09-01 UTC'::timestamptz))
+    SELECT count(*)::integer n FROM edge WHERE ${sourceLaneSql} IS DISTINCT FROM wf_canonical_staging.trading_source_lane_v1(payload)
+     OR ${sourceTimeSql} IS DISTINCT FROM wf_canonical_staging.trading_source_time_v1(source_created_at)`)).rows[0].n;
+   assert.equal(equivalence,0,'Direct index expressions must equal retained cursor helpers, including nulls and microseconds');
    const makeSnapshot=async(surface='trading_floor',count=9)=>(await db.query("INSERT INTO wf_canonical_staging.keyset_snapshot_registry(surface,member_count,expires_at) VALUES($1,$2,now()+interval '1 hour') RETURNING snapshot_id",[surface,count])).rows[0].snapshot_id;
    const snapshot=await makeSnapshot();
    const fixture=[
@@ -91,8 +105,8 @@ async function main(){
     SELECT $1,2,CASE WHEN n%3=0 THEN 1 ELSE 2 END,NULL,'2026-09-01'::timestamptz+(n||' microseconds')::interval,
      'SYNTHETIC-SCALE-'||lpad(n::text,6,'0'),jsonb_build_object('image_status',CASE WHEN n%3=0 THEN 'SOURCE_IMAGE_PRESENT' ELSE 'NO_IMAGE' END,'image_key',CASE WHEN n%3=0 THEN 'original/'||n ELSE NULL END,'parent_listing_id',CASE WHEN n%3=2 THEN 'parent' ELSE NULL END) FROM generate_series(1,100000)n`,[scale]);
    await db.query('ANALYZE wf_canonical_staging.keyset_snapshot_members');
-   const boundary=(await db.query(`SELECT listing_id,source_created_at::text,wf_canonical_staging.trading_source_lane_v1(payload) lane FROM wf_canonical_staging.keyset_snapshot_members WHERE snapshot_id=$1 ORDER BY wf_canonical_staging.trading_source_lane_v1(payload),wf_canonical_staging.trading_source_time_v1(source_created_at),listing_id COLLATE "C" OFFSET 99000 LIMIT 1`,[scale])).rows[0];
-   const plan=(await db.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT listing_id FROM wf_canonical_staging.keyset_snapshot_members WHERE snapshot_id=$1 AND (wf_canonical_staging.trading_source_lane_v1(payload),wf_canonical_staging.trading_source_time_v1(source_created_at),listing_id COLLATE "C") > ($2,wf_canonical_staging.trading_source_time_v1($3::timestamptz),$4 COLLATE "C") ORDER BY wf_canonical_staging.trading_source_lane_v1(payload),wf_canonical_staging.trading_source_time_v1(source_created_at),listing_id COLLATE "C" LIMIT 100`,[scale,boundary.lane,boundary.source_created_at,boundary.listing_id])).rows[0]['QUERY PLAN'][0];
+   const boundary=(await db.query(`SELECT listing_id,source_created_at::text,${sourceLaneSql} lane FROM wf_canonical_staging.keyset_snapshot_members WHERE snapshot_id=$1 ORDER BY ${sourceLaneSql},${sourceTimeSql},listing_id COLLATE "C" OFFSET 99000 LIMIT 1`,[scale])).rows[0];
+   const plan=(await db.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT listing_id FROM wf_canonical_staging.keyset_snapshot_members WHERE snapshot_id=$1 AND (${sourceLaneSql},${sourceTimeSql},listing_id COLLATE "C") > ($2,wf_canonical_staging.trading_source_time_v1($3::timestamptz),$4 COLLATE "C") ORDER BY ${sourceLaneSql},${sourceTimeSql},listing_id COLLATE "C" LIMIT 100`,[scale,boundary.lane,boundary.source_created_at,boundary.listing_id])).rows[0]['QUERY PLAN'][0];
    assert.match(JSON.stringify(plan),/snapshot_source_images_order_v1/);assert.ok(plan['Execution Time']<1000,'Deep keyset index scan must remain bounded');
    const started=performance.now();const deep=(await db.query('SELECT * FROM public.get_trading_floor_source_images_keyset_v1($1,100,p_cursor_priced_rank=>2,p_cursor_image_rank=>2,p_cursor_created_at=>$2,p_cursor_listing_id=>$3)',[scale,boundary.source_created_at,boundary.listing_id])).rows;const rpcMs=performance.now()-started;
    assert.equal(deep.length,100);assert.ok(rpcMs<2000,'Actual deep RPC must use a bounded plan');
@@ -100,7 +114,7 @@ async function main(){
    report.databases.push({container,database,server_version:(await db.query('SHOW server_version')).rows[0].server_version,
     fixture_rows:9,all_page_order_and_membership:true,filter_cases:cases.length,all_sort_count_parity:true,
     child_evidence_search:true,source_date_not_inferred:true,frozen_payload_unchanged:true,invalid_cursor_snapshot_rejected:true,
-    scale_rows:100000,deep_page_rows:deep.length,deep_index_execution_ms:plan['Execution Time'],deep_rpc_ms:rpcMs,exact_transaction_rollback:true});save();
+    inline_index:indexDefinition,direct_index_cursor_helper_equivalence:true,scale_rows:100000,deep_page_rows:deep.length,deep_index_execution_ms:plan['Execution Time'],deep_rpc_ms:rpcMs,exact_transaction_rollback:true});save();
   } finally {await db.query('ROLLBACK').catch(()=>{});await db.end();}
  }
  report.status='PASS';report.completed_at=new Date().toISOString();save();console.log(JSON.stringify(report));
