@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { CatalogModelEvidence } from '../components/CatalogModelEvidence';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, Store, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
@@ -2751,6 +2752,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
             )}
             <section>
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 28, lineHeight: 1.15 }}>{title}</h1>
+              <CatalogModelEvidence listing={summary} />
               <div style={{ color: GOLD, fontSize: 22, fontWeight: 800, marginTop: 10 }}>
                 {Number(summary.price_usd) > 0 ? `$${Number(summary.price_usd).toLocaleString()}` : 'Price not available'}
               </div>
@@ -2816,6 +2818,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               </div>
 
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{[detail.brand, detail.model, detail.reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ')}</h1>
+              <CatalogModelEvidence listing={summary} />
               <div style={{ color: hasDisplayPrice ? GOLD : '#8a6500', fontSize: 26, fontWeight: 800, marginBottom: 28 }}>
                 {hasDisplayPrice
                   ? `$${Number(displayPrice).toLocaleString()}`

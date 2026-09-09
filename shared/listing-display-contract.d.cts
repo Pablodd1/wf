@@ -82,6 +82,11 @@ export interface ListingDisplayContract {
   source_deleted?: boolean | null;
   source_created_at_text?: string | null;
   original_price_role?: 'ASKING_PRICE' | 'WTS_ASK' | 'WTB_BUDGET' | null;
+  source_model?: string | null;
+  model_source?: 'CATALOG_EXACT_BRAND_REFERENCE';
+  model_catalog_sha256?: string;
+  model_catalog_reference?: string;
+  model_catalog_source_files?: string[];
   price_display_verified: boolean;
   price_evidence_status: string | null;
   image_reachable?: boolean | null;

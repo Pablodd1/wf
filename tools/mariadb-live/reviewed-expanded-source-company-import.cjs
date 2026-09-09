@@ -48,10 +48,12 @@ async function importReviewedExpandedSourceCompanies(db,{snapshotBytes,expectedS
   let publicNameEvidence=null,companyName=null;
   if(selected.public_name_review){
    const review=selected.public_name_review;
-   if(review.contract==='WF_EXACT_SOURCE_POSTER_LABEL_REVIEW_V3'){
+   if(['WF_EXACT_SOURCE_POSTER_LABEL_REVIEW_V3','WF_EXACT_SOURCE_POSTER_WHITESPACE_REVIEW_V3'].includes(review.contract)){
+    const original=raw.raw_payload.from_name;
+    const rendered=review.contract==='WF_EXACT_SOURCE_POSTER_WHITESPACE_REVIEW_V3'&&typeof original==='string'?original.replace(/\s+/gu,' ').trim():original;
     if(!permission||review.source_field!=='from_name'||review.raw_row_id!==raw.id||review.source_id!==raw.source_id||review.source_hash!==raw.source_hash
      ||typeof raw.raw_payload.from_name!=='string'||review.source_text_sha256!==crypto.createHash('sha256').update(raw.raw_payload.from_name).digest('hex')
-     ||review.normalized_name!==raw.raw_payload.from_name||!/^[a-f0-9]{64}$/.test(review.review_packet_sha256||''))refuse('COMPANY_IMPORT_PUBLIC_NAME_PROOF_MISMATCH');
+     ||review.normalized_name!==rendered||!/^[a-f0-9]{64}$/.test(review.review_packet_sha256||''))refuse('COMPANY_IMPORT_PUBLIC_NAME_PROOF_MISMATCH');
     name=redactPublicSource(review.normalized_name).trim();publicNameEvidence=review;
    }else{
    if(review.contract!=='WF_EXACT_SOURCE_NAME_WHITESPACE_REVIEW_V1'||review.source_field!=='name'
@@ -63,7 +65,7 @@ async function importReviewedExpandedSourceCompanies(db,{snapshotBytes,expectedS
    publicNameEvidence=review;
    }
   }
-  if(publicNameEvidence?.contract!=='WF_EXACT_SOURCE_POSTER_LABEL_REVIEW_V3')companyName=name;
+  if(!['WF_EXACT_SOURCE_POSTER_LABEL_REVIEW_V3','WF_EXACT_SOURCE_POSTER_WHITESPACE_REVIEW_V3'].includes(publicNameEvidence?.contract))companyName=name;
   if(!name||name.length>200||/^[\d\s()+.-]+$/.test(name)||/\[.*redacted\]/.test(name)||/[\u0000-\u001f]/.test(name))refuse('COMPANY_IMPORT_PUBLIC_NAME_REQUIRES_REVIEW');
   prepared.push({id:companyUuid(proof.company_id),name,companyName,phone:proof.private_phone_identity,status:permission?'UNVERIFIED':'VERIFIED',identitySource:permission?'WF_SOURCE_POSTER_V1':'WF_VERIFIED_SOURCE_COMPANY_V1',metadata:{contract:permission?'WF_COMPLETE_SOURCE_POSTER_IDENTITY_V1':'WF_COMPLETE_SOURCE_COMPANY_IDENTITY_V1',company_id:proof.company_id,
    company_snapshot_sha256:expectedSnapshotSha256,company_fields_sha256:proof.company_fields_sha256,

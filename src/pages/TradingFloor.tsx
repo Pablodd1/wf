@@ -18,6 +18,7 @@ import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
+import { CatalogModelEvidence } from '../components/CatalogModelEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
 import { canaryBrowseEnabled, loadPublishedBrowse, publishedBrowseBrand } from '../utils/publishedBrowse';
 import { ambiguousPriceDisplay, strongestPostingIdentity, listingAvailabilityLabel } from '../lib/customerEvidence';
@@ -2230,6 +2231,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             {listing.model_requires_review === true && (
               <div className="mt-1 text-xs font-medium text-[#7A8699]">Model requires review</div>
             )}
+            <CatalogModelEvidence listing={listing} />
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
             {meta.foreignLabel && <div className="mt-1 text-xs font-medium text-[#7A8699]">{meta.foreignLabel}</div>}
