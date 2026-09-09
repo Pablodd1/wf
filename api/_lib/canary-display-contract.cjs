@@ -1,7 +1,7 @@
 'use strict';
 const { enforceListingDisplayContract: enforce } = require('../../shared/listing-display-contract.cjs');
 const { publishedBrand } = require('./published-brand-aliases.cjs');
-const { withExactCatalogModel } = require('../../shared/exact-catalog-model-map.cjs');
+const { withCatalogModelDisplay: withExactCatalogModel } = require('../../shared/catalog-model-display-v2.cjs');
 
 // A genuine external preview needs a reachable synthetic image origin. This
 // transport override cannot apply to production or to real listing evidence.
