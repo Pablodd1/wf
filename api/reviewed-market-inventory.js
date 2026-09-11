@@ -11,6 +11,7 @@ const { classifyZenithIdentityEvidence } = require('./_lib/zenith-identity-evide
 const { luxuryIdentityEligibility, normalizeLuxuryIdentity } = require('./_lib/luxury-item-normalization.cjs');
 const { classifyWatchPartListing } = require('./_lib/watch-item-classification.cjs');
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
+const { extractReference, extractPriceObservations } = require('./_lib/normalization-v4.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
   MARKET_SELECTOR: CURATED_SHADOW_MARKET_SOURCE,
@@ -1194,7 +1195,15 @@ function mapReviewedRecord(row) {
   const watchPart = classifyWatchPartListing(row);
   const itemCategory = watchPart?.category || effectiveItemCategory(row);
   const storedModel = row.model || row.catalog_model || null;
-  const sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
+  let sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
+  if (row.raw_message && (!sourceReference || /^\d{4,6}$/.test(sourceReference))) {
+    const extracted = extractReference(row.raw_message);
+    if (extracted && typeof extracted === 'string') {
+      sourceReference = extracted;
+    } else if (extracted && extracted.normalized_value) {
+      sourceReference = extracted.normalized_value;
+    }
+  }
   const catalogIdentity = sourceReference && brand ? lookupCatalog(sourceReference, brand) : null;
   const model = storedModel || (catalogIdentity?.found ? catalogIdentity.model : null) || null;
   const invalidReference = row.reference_is_price_token === true
@@ -1262,7 +1271,13 @@ function mapReviewedRecord(row) {
     workbookPriceReview,
     rmMyrPriceArtifact,
   });
-  const displayPriceUsd = publicVerifiedUsd ?? ownerAssumedUsd;
+  let displayPriceUsd = publicVerifiedUsd ?? ownerAssumedUsd;
+  if ((displayPriceUsd === null || displayPriceUsd === undefined) && row.raw_message) {
+    const rawP = extractPriceObservations(row.raw_message, {});
+    if (rawP && rawP.length > 0 && rawP[0].amount_usd) {
+      displayPriceUsd = rawP[0].amount_usd;
+    }
+  }
   const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'

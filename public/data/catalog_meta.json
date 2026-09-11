@@ -1,0 +1,371 @@
+{
+  "total_listings": 587931,
+  "chunk_count": 12,
+  "chunk_size": 50000,
+  "total_dealers": 3039,
+  "total_research": 17845,
+  "sorted_brands": [
+    [
+      "Rolex",
+      357086
+    ],
+    [
+      "Audemars Piguet",
+      89422
+    ],
+    [
+      "Patek Philippe",
+      75902
+    ],
+    [
+      "Richard Mille",
+      42564
+    ],
+    [
+      "Vacheron Constantin",
+      7058
+    ],
+    [
+      "Cartier",
+      3989
+    ],
+    [
+      "Panerai",
+      3306
+    ],
+    [
+      "F.P. Journe",
+      1336
+    ],
+    [
+      "Omega",
+      931
+    ],
+    [
+      "IWC",
+      875
+    ],
+    [
+      "Hublot",
+      818
+    ],
+    [
+      "Breguet",
+      803
+    ],
+    [
+      "A. Lange & S\u00f6hne",
+      791
+    ],
+    [
+      "Tudor",
+      766
+    ],
+    [
+      "Jaeger-LeCoultre",
+      583
+    ],
+    [
+      "Chopard",
+      527
+    ],
+    [
+      "Zenith",
+      438
+    ],
+    [
+      "Breitling",
+      308
+    ],
+    [
+      "Girard-Perregaux",
+      250
+    ],
+    [
+      "Franck Muller",
+      178
+    ]
+  ],
+  "ticker_samples": [
+    {
+      "brand": "Patek Philippe",
+      "model": "Nautilus",
+      "reference": "7118/1300",
+      "price": 12672000,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Nautilus",
+      "reference": "7118/1300R",
+      "price": 12672000,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Nautilus",
+      "reference": "7118/1300R",
+      "price": 12672000,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Rolex Collection",
+      "reference": "Unspecified",
+      "price": 9450000,
+      "type": "sale"
+    },
+    {
+      "brand": "Audemars Piguet",
+      "model": "Royal Oak",
+      "reference": "26222BC",
+      "price": 8336000,
+      "type": "sale"
+    },
+    {
+      "brand": "Audemars Piguet",
+      "model": "Royal Oak",
+      "reference": "26222BC",
+      "price": 8336000,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Grand Complications",
+      "reference": "5270J-001",
+      "price": 8333000,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Grand Complications",
+      "reference": "5270J-001",
+      "price": 8320000,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Patek Philippe Collection",
+      "reference": "Unspecified",
+      "price": 7040000,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Patek Philippe Collection",
+      "reference": "6300G-010",
+      "price": 6897160,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM74-02",
+      "price": 5700000,
+      "type": "sale"
+    },
+    {
+      "brand": "Audemars Piguet",
+      "model": "Royal Oak",
+      "reference": "15550BA",
+      "price": 5248000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM47",
+      "price": 4460000,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Patek Philippe Collection",
+      "reference": "5147G-001",
+      "price": 3929900.0,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Patek Philippe Collection",
+      "reference": "5073/P",
+      "price": 3750000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM 56-02",
+      "price": 3700000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM56-02",
+      "price": 3700000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM 52-06",
+      "price": 3700000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM57",
+      "price": 3160000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM57-03",
+      "price": 3150000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM53-01",
+      "price": 2900000,
+      "type": "sale"
+    },
+    {
+      "brand": "Audemars Piguet",
+      "model": "Royal Oak",
+      "reference": "15407ST",
+      "price": 2816000,
+      "type": "sale"
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "model": "Fiftysix",
+      "reference": "4600V/200A",
+      "price": 2626700.0,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM 27-02",
+      "price": 2350000,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Rolex Collection",
+      "reference": "Uncataloged",
+      "price": 2200000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "RM 037 Automatic",
+      "reference": "RM037",
+      "price": 2200000,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Oyster Perpetual",
+      "reference": "Uncataloged",
+      "price": 2100000,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Rolex Collection",
+      "reference": "Uncataloged",
+      "price": 2100000,
+      "type": "sale"
+    },
+    {
+      "brand": "Audemars Piguet",
+      "model": "Royal Oak",
+      "reference": "15450ST",
+      "price": 2100000.0,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Cosmograph Daytona",
+      "reference": "116589SACI",
+      "price": 2079000,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Cosmograph Daytona",
+      "reference": "116589SACI",
+      "price": 2079000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM 50-04",
+      "price": 1950000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM47",
+      "price": 1930000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM047",
+      "price": 1930000,
+      "type": "sale"
+    },
+    {
+      "brand": "Richard Mille",
+      "model": "Richard Mille Collection",
+      "reference": "RM47",
+      "price": 1930000,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Cosmograph Daytona",
+      "reference": "116589SACI",
+      "price": 1905500,
+      "type": "sale"
+    },
+    {
+      "brand": "Rolex",
+      "model": "Cosmograph Daytona",
+      "reference": "116589SACI",
+      "price": 1905500,
+      "type": "sale"
+    },
+    {
+      "brand": "Patek Philippe",
+      "model": "Patek Philippe Collection",
+      "reference": "5304/301R",
+      "price": 1880000,
+      "type": "sale"
+    },
+    {
+      "brand": "F.P. Journe",
+      "model": "F.P. Journe Timepiece",
+      "reference": "Uncataloged",
+      "price": 1800000,
+      "type": "sale"
+    },
+    {
+      "brand": "F.P. Journe",
+      "model": "F.P. Journe Timepiece",
+      "reference": "Uncataloged",
+      "price": 1800000,
+      "type": "sale"
+    }
+  ]
+}

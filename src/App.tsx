@@ -38,6 +38,7 @@ const DealerDirectory = recoverableRoute('dealer-directory', () => import('@/pag
 const DealerProfile = recoverableRoute('dealer-profile', () => import('@/pages/DealerProfile'));
 const TelegramTest = recoverableRoute('telegram-test', () => import('@/pages/TelegramTest'));
 const MultiListings = recoverableRoute('multi-listings', () => import('@/pages/MultiListings'));
+const WeeklyListingsFeed = recoverableRoute('weekly-feed', () => import('@/pages/WeeklyListingsFeed'));
 const PublicInfo = recoverableRoute('public-info', () => import('@/pages/PublicInfo'));
 const FlashSaleDetail = recoverableRoute('flash-sale-detail', () => import('@/pages/FlashSaleDetail'));
 const Blog = recoverableRoute('blog', () => import('@/pages/Blog'));
@@ -85,6 +86,8 @@ export default function App() {
         <Route path="/demo-mode" element={<DealerGate allowedRoles={['admin']}><DemoMode /></DealerGate>} />
         <Route path="/admin" element={<DealerGate allowedRoles={['admin']}><AdminPage /></DealerGate>} />
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
+        <Route path="/weekly-feed" element={<WeeklyListingsFeed />} />
+        <Route path="/unbundled-feed" element={<WeeklyListingsFeed />} />
         <Route path="/dealers" element={<DealerDirectory />} />
         <Route path="/dealers/:dealerId" element={<DealerProfile />} />
         <Route path="/reference-check" element={<DealerDirectory />} />

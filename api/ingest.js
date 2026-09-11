@@ -914,6 +914,11 @@ function extractBrand(text, ref, context) {
 
 function extractReference(text) {
   const patterns = [
+    { pattern: /\b(W[A-Z0-9]{7})\b/i, confidence: 95 },
+    { pattern: /\b(W\d{6,7}[A-Z0-9]?)\b/i, confidence: 95 },
+    { pattern: /\b(\d{2}\.\d{4}\.\d{3,4}(?:\/\d{2,4}\.[A-Z0-9.]+)?)\b/i, confidence: 95 },
+    { pattern: /\b([A-Z]{3}\d{4}\.[A-Z0-9]+)\b/i, confidence: 95 },
+    { pattern: /\b(79\d{3}[A-Z0-9-]{0,8})\b/i, confidence: 95 },
     { pattern: /\b(\d{3}\.[A-Z0-9]{2,4}\.\d{4}\.[A-Z0-9.]{2,15})\b/i, confidence: 95 },
     { pattern: /\b((?:15|26|77|67)[0-9]{3}[A-Z]{2}\.[A-Z]{2}\.\d{4}[A-Z]{2}\.\d{2})\b/i, confidence: 95 },
     { pattern: /\b((?:15|26|77|67)[0-9]{3}[A-Z]{2}(?:\.OO\.[A-Z0-9.]+)?)\b/i, confidence: 92 },
@@ -927,8 +932,10 @@ function extractReference(text) {
     { pattern: /(?<!(?:used|new|unused|mint|like new)[\s\t]*)\b([A-Z]?[0-9]{4,6}[A-Z]{0,4})\b/i, confidence: 70 },
   ];
 
-  const textWithoutPrices = text.replace(/[0-9.,]+[kKmMwW万]?\s*(?:hkd|usd|rmb|chf|gbp|eur|jpy)/gi, '')
-                                .replace(/(?:hkd|usd|rmb|chf|gbp|eur|jpy)\s*[0-9.,]+[kKmMwW万]/gi, '');
+  let cleaned = String(text || '').replace(/^\s*\d{4,6}\s*[-–—]\s*/, '');
+  const textWithoutPrices = cleaned
+    .replace(/(?:\$|€|£|¥|￥|HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|JPY|CNY|RMB)\s*[\d,.]+(?:\s*[kKmMwW万])?/gi, '')
+    .replace(/[\d,.]+\s*(?:\$|€|£|¥|￥|HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|JPY|CNY|RMB|[kKmMwW万]\b)/gi, '');
 
   for (const { pattern, confidence } of patterns) {
     const match = textWithoutPrices.match(pattern);
@@ -1403,6 +1410,21 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
         if (llm.condition) parsed.condition = llm.condition;
         if (llm.setStatus) parsed.set_status = llm.setStatus;
         if (llm.year) parsed.year = llm.year;
+        if (llm.price && (!parsed.prices || parsed.prices.length === 0)) {
+          const rawP = Number(String(llm.price).replace(/[^0-9.]/g, ''));
+          const cur = String(llm.currency || 'USD').toUpperCase();
+          if (rawP > 0) {
+            const usdRate = { USD: 1, USDT: 1, HKD: 0.128, EUR: 1.08, GBP: 1.27, CHF: 1.13, SGD: 0.74, AUD: 0.65, CAD: 0.73, JPY: 0.0066, CNY: 0.138, RMB: 0.138, AED: 0.272 }[cur] || 1;
+            parsed.prices = [{
+              price_type: 'ASK_PRICE',
+              amount_original: rawP,
+              currency_original: cur,
+              amount_usd: Math.round(rawP * usdRate),
+              is_primary: true,
+              confidence: 90
+            }];
+          }
+        }
         parsed.confidence = Math.max(parsed.confidence, parseInt(llm.confidence) || 0);
       } catch (e) {
         console.error('[JASS-5 Ingest] LLM fallback error:', e.message);

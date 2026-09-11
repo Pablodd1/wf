@@ -54,3 +54,8 @@ audit-output/raw-first-rolex-patek/*-manifest.jsonl.gz
 audit-output/raw-first-rolex-patek/remaining-queues.jsonl.gz
 audit-output/raw-first-rolex-patek/sanitized-exact-deltas.jsonl.gz
 audit-output/raw-first-rolex-patek/manifest-sha256.json
+
+# Local and Vercel artifacts
+.vercel/
+.env.vercel
+fix_prices.cjs

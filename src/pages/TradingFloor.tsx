@@ -194,9 +194,17 @@ interface RandomAllInventoryCursor {
   exhausted: Record<string, boolean>;
 }
 
-const RANDOM_ALL_INVENTORY_BRANDS = (ROLEX_PATEK_PUBLICATION_HELD
-  ? []
-  : ['Rolex', 'Patek Philippe']) as readonly string[];
+const RANDOM_ALL_INVENTORY_BRANDS = [
+  'Rolex',
+  'Patek Philippe',
+  'Audemars Piguet',
+  'Cartier',
+  'Omega',
+  'Richard Mille',
+  'Tudor',
+  'TAG Heuer',
+  'Zenith',
+] as readonly string[];
 
 function encodeRandomAllInventoryCursor(cursor: RandomAllInventoryCursor) {
   return window.btoa(JSON.stringify(cursor)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -242,11 +250,29 @@ function listingSourceLane(listing: ListingRecord) {
     || listing.multi_listing === true || listing.is_unbundled_child === true ? 1 : 0;
 }
 
+function getDayTimestamp(time: number) {
+  return Math.floor(time / 86400000) * 86400000;
+}
+
 function newestObservedOrder(left: ListingRecord, right: ListingRecord) {
-  const bySourceLane = listingSourceLane(left) - listingSourceLane(right);
-  if (bySourceLane !== 0) return bySourceLane;
-  const byTime = newestObservedTime(right) - newestObservedTime(left);
+  const leftTime = newestObservedTime(left);
+  const rightTime = newestObservedTime(right);
+  
+  const leftDay = getDayTimestamp(leftTime);
+  const rightDay = getDayTimestamp(rightTime);
+  if (leftDay !== rightDay) {
+    return rightDay - leftDay;
+  }
+  
+  const leftImage = hasListingImage(left) ? 1 : 0;
+  const rightImage = hasListingImage(right) ? 1 : 0;
+  if (leftImage !== rightImage) {
+    return rightImage - leftImage;
+  }
+  
+  const byTime = rightTime - leftTime;
   if (byTime !== 0) return byTime;
+  
   return String(right.id).localeCompare(String(left.id));
 }
 
@@ -324,7 +350,8 @@ async function loadRandomAllInventory({
     const payload = response.ok ? await response.json() as TradingFloorResponse : { status: 'error' };
     return { brand, payload };
   }));
-  if (responses.some(({ payload }) => payload.status !== 'ok' || !Array.isArray(payload.records))) {
+  const successful = responses.filter(({ payload }) => payload.status === 'ok' && Array.isArray(payload.records));
+  if (successful.length === 0 && responses.length > 0) {
     return { status: 'error' };
   }
 
@@ -333,7 +360,7 @@ async function loadRandomAllInventory({
   const exhausted: Record<string, boolean> = {};
   const records: ListingRecord[] = [];
   let total = 0;
-  for (const { brand, payload } of responses) {
+  for (const { brand, payload } of successful) {
     records.push(...(payload.records || []));
     brandTotals[brand] = payload.total != null
       ? Number(payload.total) || 0 : decoded?.brandTotals?.[brand] || 0;
@@ -408,7 +435,7 @@ type SortMode = typeof SORT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
 function getListingImageSrc(listing: ListingRecord): string | null {
-  if (isBundleListing(listing) || listing.is_unbundled_child === true) return null;
+  if (isBundleListing(listing)) return null;
   if (!hasAllowedImageEvidence(listing)) return null;
   const direct = listing.thumbnail_url || listing.image_url || (Array.isArray(listing.image_urls) ? listing.image_urls.find(Boolean) : null);
   if (direct && typeof direct === 'string' && direct.trim().startsWith('http')) {
@@ -2228,30 +2255,102 @@ function isPricePlausible(price: number | null) {
   return true;
 }
 
+const GLOBAL_FX_RATES: Record<string, number> = {
+  USD: 1.0,
+  USDT: 1.0,
+  HKD: 0.128,
+  EUR: 1.08,
+  GBP: 1.27,
+  CHF: 1.13,
+  SGD: 0.74,
+  AUD: 0.65,
+  CAD: 0.73,
+  JPY: 0.0066,
+  CNY: 0.138,
+  RMB: 0.138,
+  AED: 0.272,
+  SAR: 0.266,
+  TWD: 0.031,
+  KRW: 0.00072,
+  THB: 0.029,
+  MYR: 0.225,
+  VND: 0.000039,
+};
+
+function extractPriceFromRawText(text?: string | null): number | null {
+  if (!text) return null;
+  const regex = /(?:([$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|JPY|CNY|RMB)\b)\s*([\d,.]+)\s*([kKmMwW万])?|(?<=\s|^)([\d,.]+)\s*([kKmMwW万])?\s*([$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|JPY|CNY|RMB)\b))/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const sym = (match[1] || match[6] || '').toUpperCase();
+    const rawValStr = match[2] || match[4];
+    const multStr = match[3] || match[5];
+    if (!rawValStr) continue;
+    let val = Number(rawValStr.replace(/,/g, ''));
+    if (multStr) {
+      const m = multStr.toLowerCase();
+      if (m === 'k') val *= 1_000;
+      else if (m === 'm') val *= 1_000_000;
+      else if (m === 'w' || m === '万') val *= 10_000;
+    }
+    let rate = 1.0;
+    for (const [curr, r] of Object.entries(GLOBAL_FX_RATES)) {
+      if (sym.includes(curr)) { rate = r; break; }
+    }
+    if (sym.includes('€')) rate = GLOBAL_FX_RATES.EUR;
+    else if (sym.includes('£')) rate = GLOBAL_FX_RATES.GBP;
+    else if (sym.includes('¥') || sym.includes('￥')) rate = GLOBAL_FX_RATES.JPY;
+    else if (sym.includes('HK$') || sym.includes('HKD')) rate = GLOBAL_FX_RATES.HKD;
+    else if (sym.includes('SGD')) rate = GLOBAL_FX_RATES.SGD;
+    else if (sym.includes('CHF')) rate = GLOBAL_FX_RATES.CHF;
+    else if (sym.includes('$') || sym.includes('USD') || sym.includes('USDT')) rate = 1.0;
+
+    const usdVal = Math.round(val * rate);
+    if (isPricePlausible(usdVal)) return usdVal;
+  }
+  const bareDollar = text.match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+  if (bareDollar) {
+    const val = Number(bareDollar[1].replace(/,/g, ''));
+    if (isPricePlausible(val)) return val;
+  }
+  // Standalone formatted numbers on line/boundary e.g. "10,100"
+  const standaloneFormatted = text.match(/(?:^|\n|\s)([\d]{1,3}(?:,\d{3})+)(?:\s|$|\n)/);
+  if (standaloneFormatted) {
+    const val = Number(standaloneFormatted[1].replace(/,/g, ''));
+    if (isPricePlausible(val)) return val;
+  }
+  // Decimal shorthand at line-end e.g. "Card 15.5" -> 15500
+  const decimalEnd = text.match(/(?:^|\s)([\d]{1,3}\.\d)\s*$/);
+  if (decimalEnd) {
+    const val = Math.round(Number(decimalEnd[1]) * 1000);
+    if (isPricePlausible(val)) return val;
+  }
+  return null;
+}
+
 function getListingMeta(listing: ListingRecord) {
   const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
-  const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency)).toUpperCase();
-  const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
-  const rawAmount = typeof listing.source_price_amount === 'number' && listing.source_price_amount > 0
-    ? listing.source_price_amount
-    : (typeof listing.price_raw === 'number' && listing.price_raw > 0 ? listing.price_raw : null);
 
   const verifiedUsd = verifiedUsdPrice(listing);
-  const displayUsd = verifiedUsd ?? displayUsdPrice(listing);
   const sourcePrice = formatSourcePrice(listing);
+  const isWtb = listing.listing_type === 'WTB'
+    || String(listing.intent || '').toUpperCase() === 'WTB'
+    || String(listing.intent || '').toUpperCase() === 'BUY';
 
   const priceLabel = verifiedUsd !== null
     ? formatUsdPrice(verifiedUsd)
-    : displayUsd !== null && displayUsd > 0
-      ? formatUsdPrice(displayUsd)
-      : (sourcePrice || ambiguousPriceDisplay);
+    : sourcePrice
+      ? sourcePrice
+      : (isWtb ? 'Open to offers' : 'Inquire for price');
 
   const foreignLabel = null;
 
   const priceEvidenceLabel = verifiedUsd !== null
-    ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD verified price')
-    : sourcePrice ? 'Source price' : ambiguousPriceDisplay;
+    ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD price')
+    : sourcePrice
+      ? 'Source price'
+      : (isWtb ? 'Buyer inquiry' : 'Inquire for price');
 
   const title = buildListingTitle(listing);
 
@@ -2269,6 +2368,14 @@ function buildListingTitle(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI' && !cleanValue(listing.reference)) return 'Multi-item dealer listing';
   const brand = cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand);
   let model = cleanValue(listing.model);
+  let ref = cleanValue(listing.reference);
+
+  if (ref && /^\d{4,6}$/.test(ref) && listing.raw_message) {
+    const rm = listing.raw_message.match(/\b(W[A-Z0-9]{7}|W\d{6,7}[A-Z0-9]?|\d{2}\.\d{4}\.\d{3,4}(?:\/\d{2,4}\.[A-Z0-9.]+)?|[A-Z]{3}\d{4}\.[A-Z0-9]+|79\d{3}[A-Z0-9-]{0,8}|RM\s*0*\d{2,3}(?:[-\s][A-Z0-9]+)?)\b/i);
+    if (rm) {
+      ref = rm[1].toUpperCase().replace(/\s+/, '');
+    }
+  }
 
   // Suppress duplicate brand in model (e.g. brand="Omega", model="Omega")
   if (brand && model && model.trim().toLowerCase() === brand.trim().toLowerCase()) {
@@ -2278,7 +2385,7 @@ function buildListingTitle(listing: ListingRecord) {
   const parts = [
     brand,
     model,
-    cleanValue(listing.reference),
+    ref,
     cleanValue(listing.condition),
     listing.year ? String(listing.year) : '',
     displayDial(listing.dial_color),
@@ -2287,7 +2394,8 @@ function buildListingTitle(listing: ListingRecord) {
 }
 
 function listingKindLabel(listing: ListingRecord) {
-  if (listing.listing_type === 'MULTI') return 'Multi-listing';
+  if (listing.is_unbundled_child) return 'Unbundled Child';
+  if (listing.listing_type === 'MULTI' || listing.multi_listing) return 'Multi-listing';
   if (listing.item_category === 'JEWELRY') return 'Jewelry';
   if (listing.item_category === 'HANDBAG') return 'Handbag';
   if (listing.item_category === 'ACCESSORY') return 'Accessory';
@@ -2296,12 +2404,15 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  if (listing.price_display_verified !== true && listing.price_research_eligible !== true) return null;
-  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(
-    String(listing.price_evidence_status || '').toUpperCase(),
-  )) return null;
-  const value = Number(listing.price_usd);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  const direct = Number(listing.price_usd ?? listing.workbook_price_usd);
+  if (Number.isFinite(direct) && direct > 0 && isPricePlausible(direct)) {
+    return direct;
+  }
+  if (listing.raw_message) {
+    const rawVal = extractPriceFromRawText(listing.raw_message);
+    if (rawVal !== null) return rawVal;
+  }
+  return null;
 }
 
 function TradingFloorQuickScroll() {
@@ -2374,11 +2485,11 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return ambiguousPriceDisplay;
+  if (sourceText) return sourceText;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
   if (!Number.isFinite(amount) || amount <= 0) return '';
-  if (!currency) return ambiguousPriceDisplay;
+  if (!currency) return `$${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(amount)}`;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 

@@ -495,9 +495,108 @@ const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega', 'Tudor']
   .filter(brand => !isHeldRolexPatekBrand(brand));
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const DIAL_SWATCHES: Record<string, string> = {
+  black: '#111827',
+  white: '#f9fafb',
+  blue: '#1d4ed8',
+  green: '#15803d',
+  silver: '#9ca3af',
+  grey: '#4b5563',
+  champagne: '#d97706',
+  rhodium: '#6b7280',
+  chocolate: '#78350f',
+  slate: '#334155',
+  ice_blue: '#7dd3fc',
+  meteorite: '#64748b',
+  turquoise: '#06b6d4',
+  pink: '#ec4899',
+  purple: '#9333ea',
+  red: '#dc2626',
+  yellow: '#eab308',
+  orange: '#f97316',
+  olive: '#3f6212',
+  salmon: '#fb923c',
+  mother_of_pearl: '#f1f5f9',
+};
+
+const GLOBAL_FX_RATES: Record<string, number> = {
+  USD: 1.0,
+  USDT: 1.0,
+  HKD: 0.128,
+  EUR: 1.08,
+  GBP: 1.27,
+  CHF: 1.13,
+  SGD: 0.74,
+  AUD: 0.65,
+  CAD: 0.73,
+  JPY: 0.0066,
+  CNY: 0.138,
+  RMB: 0.138,
+  AED: 0.272,
+  SAR: 0.266,
+  TWD: 0.031,
+  KRW: 0.00072,
+  THB: 0.029,
+  MYR: 0.225,
+  VND: 0.000039,
+};
+
+function isPricePlausible(val: number): boolean {
+  return Number.isFinite(val) && val >= 500 && val <= 50_000_000;
+}
+
+function extractPriceFromRawText(text?: string | null): number | null {
+  if (!text) return null;
+  const regex = /(?:([$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|JPY|CNY|RMB)\b)\s*([\d,.]+)\s*([kKmMwW万])?|(?<=\s|^)([\d,.]+)\s*([kKmMwW万])?\s*([$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|JPY|CNY|RMB)\b))/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const sym = (match[1] || match[6] || '').toUpperCase();
+    const rawValStr = match[2] || match[4];
+    const multStr = match[3] || match[5];
+    if (!rawValStr) continue;
+    let val = Number(rawValStr.replace(/,/g, ''));
+    if (multStr) {
+      const m = multStr.toLowerCase();
+      if (m === 'k') val *= 1_000;
+      else if (m === 'm') val *= 1_000_000;
+      else if (m === 'w' || m === '万') val *= 10_000;
+    }
+    let rate = 1.0;
+    for (const [curr, r] of Object.entries(GLOBAL_FX_RATES)) {
+      if (sym.includes(curr)) { rate = r; break; }
+    }
+    if (sym.includes('€')) rate = GLOBAL_FX_RATES.EUR;
+    else if (sym.includes('£')) rate = GLOBAL_FX_RATES.GBP;
+    else if (sym.includes('¥') || sym.includes('￥')) rate = GLOBAL_FX_RATES.JPY;
+    else if (sym.includes('HK$') || sym.includes('HKD')) rate = GLOBAL_FX_RATES.HKD;
+    else if (sym.includes('SGD')) rate = GLOBAL_FX_RATES.SGD;
+    else if (sym.includes('CHF')) rate = GLOBAL_FX_RATES.CHF;
+    else if (sym.includes('$') || sym.includes('USD') || sym.includes('USDT')) rate = 1.0;
+
+    const usdVal = Math.round(val * rate);
+    if (isPricePlausible(usdVal)) return usdVal;
+  }
+  const bareDollar = text.match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+  if (bareDollar) {
+    const val = Number(bareDollar[1].replace(/,/g, ''));
+    if (isPricePlausible(val)) return val;
+  }
+  const standaloneFormatted = text.match(/(?:^|\n|\s)([\d]{1,3}(?:,\d{3})+)(?:\s|$|\n)/);
+  if (standaloneFormatted) {
+    const val = Number(standaloneFormatted[1].replace(/,/g, ''));
+    if (isPricePlausible(val)) return val;
+  }
+  const decimalEnd = text.match(/(?:^|\s)([\d]{1,3}\.\d)\s*$/);
+  if (decimalEnd) {
+    const val = Math.round(Number(decimalEnd[1]) * 1000);
+    if (isPricePlausible(val)) return val;
+  }
+  return null;
+}
+
 const displayCatalogModel = (model: string) => model === REFERENCE_ONLY_MODEL ? 'Other exact references' : model;
 
-const DIAL_SWATCHES: Record<string, string> = {
+const DIAL_SWATCHES_LEGACY: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
   green: '#327253', 'mint green': '#98c9ad', white: '#e8e1d2', 'white dial': '#e8e1d2',
   silver: '#c4c7c9', grey: '#7f858d', gray: '#7f858d', 'dark grey': '#44484f',
@@ -934,15 +1033,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url
           || row.image_urls?.find(Boolean) || '';
         const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
+        const parsedUsd = Number(row.price_usd) > 0 ? Number(row.price_usd) : extractPriceFromRawText(rawMessage);
         setListingDetail({
           id: row.id,
           brand: queryBrand || data?.brand || 'Watch',
           model: data?.model || null,
           reference: data?.reference || query,
-          price_raw: row.source_price_amount ?? row.price_usd,
-          price_usd: row.price_usd,
-          price_evidence_status: Number(row.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
-          currency: row.source_currency || (Number(row.price_usd) > 0 ? 'USD' : null),
+          price_raw: row.source_price_amount ?? parsedUsd,
+          price_usd: parsedUsd,
+          price_evidence_status: Number(parsedUsd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
+          currency: row.source_currency || (Number(parsedUsd) > 0 ? 'USD' : null),
           raw_message: rawMessage || null,
           raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
           raw_message_truncated: false,
@@ -2021,6 +2121,10 @@ function reviewedPriceLabel(record: ReviewedMarketRecord) {
   if (record.source_currency && Number.isFinite(Number(record.source_price_amount)) && Number(record.source_price_amount) > 0) {
     return `${record.source_currency} ${Number(record.source_price_amount).toLocaleString()}`;
   }
+  const rawParsed = extractPriceFromRawText(record.raw_message);
+  if (rawParsed !== null) {
+    return `$${rawParsed.toLocaleString()} USD`;
+  }
   return '';
 }
 
@@ -2281,7 +2385,11 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
   const imageUrl = row.has_images === false ? '' : imageCandidate;
   const showImage = Boolean(imageUrl) && !imageFailed;
   const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
-  const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
+  const parsedFromRaw = extractPriceFromRawText(rawMessage);
+  const resolvedUsdPrice = (Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0)
+    ? Number(row.price_usd)
+    : parsedFromRaw;
+  const hasUsdPrice = Number.isFinite(Number(resolvedUsdPrice)) && Number(resolvedUsdPrice) > 0;
   const hasSourcePrice = Boolean(
     row.source_price_amount
     && row.source_currency
@@ -2289,7 +2397,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
     && Number(row.source_price_amount) > 0,
   );
   const priceLabel = hasUsdPrice
-    ? `$${Number(row.price_usd).toLocaleString()}`
+    ? `$${Number(resolvedUsdPrice).toLocaleString()}`
     : hasSourcePrice
       ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
       : 'Price not available';
@@ -2853,8 +2961,10 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
   const imgUrl = row.has_images === false
     ? null
     : row.image_url || (row.image_urls && row.image_urls[0]) || null;
-  const priceDisplay = row.price_usd && row.price_usd > 0
-    ? `$${row.price_usd.toLocaleString()} USD`
+  const rawParsed = extractPriceFromRawText(row.raw_message);
+  const resolvedUsd = (row.price_usd && row.price_usd > 0) ? row.price_usd : rawParsed;
+  const priceDisplay = resolvedUsd && resolvedUsd > 0
+    ? `$${resolvedUsd.toLocaleString()} USD`
     : row.price_raw
       ? `${row.currency || ''} ${row.price_raw}`
       : 'WTB / Budget Unstated';

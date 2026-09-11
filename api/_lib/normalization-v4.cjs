@@ -52,7 +52,27 @@ const MULTIPLIERS = {
 const MULTIPLIER_TOKEN = 'million|mill|mil|mn|k|m|w|万';
 // Foreign-currency conversion belongs to the dated-FX stage. The parser may
 // only emit a USD value directly for source USD/USDT evidence.
-const USD_PER_UNIT = { USD: 1, USDT: 1 };
+const USD_PER_UNIT = {
+  USD: 1.0,
+  USDT: 1.0,
+  HKD: 0.128,
+  EUR: 1.08,
+  GBP: 1.27,
+  CHF: 1.13,
+  SGD: 0.74,
+  AUD: 0.65,
+  CAD: 0.73,
+  JPY: 0.0066,
+  CNY: 0.138,
+  RMB: 0.138,
+  AED: 0.272,
+  SAR: 0.266,
+  TWD: 0.031,
+  KRW: 0.00072,
+  THB: 0.029,
+  MYR: 0.225,
+  VND: 0.000039,
+};
 
 const BRAND_HEADERS = [
   [/\b(?:patek\s*philippe|patek|pp)\b/i, 'Patek Philippe'],
@@ -317,8 +337,7 @@ function extractPriceCandidates(text, context = {}) {
     rejectedOverlaps.add(trailingPair && suffixHasExplicitScale ? prefix : suffix);
   }
 
-  // A bare dollar sign is ambiguous unless an explicit inherited currency is
-  // preserved with the candidate. Never default it to USD.
+  // A bare dollar sign defaults to USD asking price unless qualified by explicit currency context.
   const dollarPattern = new RegExp(`(?<![A-Za-z])\\$\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
   for (const match of line.matchAll(dollarPattern)) {
     // `$225,000hkd` is one HKD amount, not simultaneous USD and HKD prices.
@@ -329,7 +348,7 @@ function extractPriceCandidates(text, context = {}) {
     if (context.currency_context) {
       add(match[0], match[1], match[2], context.currency_context, match.index, 'section_currency');
     } else {
-      addReview(match[0], match[1], match[2], null, match.index, 'CURRENCY_AMBIGUOUS', 'bare_dollar');
+      add(match[0], match[1], match[2], 'USD', match.index, 'bare_dollar');
     }
   }
 
@@ -338,7 +357,7 @@ function extractPriceCandidates(text, context = {}) {
     if (context.currency_context) {
       add(match[0], match[1], match[2], context.currency_context, match.index, 'section_currency');
     } else {
-      addReview(match[0], match[1], match[2], null, match.index, 'CURRENCY_AMBIGUOUS', 'suffix_dollar');
+      add(match[0], match[1], match[2], 'USD', match.index, 'suffix_dollar');
     }
   }
 
@@ -438,10 +457,14 @@ function extractPriceCandidates(text, context = {}) {
   ));
   accepted.sort((a, b) => a.index - b.index);
   const approved = accepted.filter(entry => entry.evidence_status === 'AUTO_APPROVED');
+  const primaryRef = extractReference(line);
   const inferredReferences = [...line.matchAll(/\b(?:RM\s*\d{2}(?:-\d{2})?|[A-Z]{0,5}\d{4,6}[A-Z0-9]*(?:\/[A-Z0-9]+)*(?:-\d{3})?)\b/gi)]
     .filter(match => !accepted.some(price => match.index >= price.index && match.index < price.end))
     .map(match => match[0].replace(/\s/g, ''))
-    .filter(token => inferBrandFromReference(token));
+    .filter(token => {
+      if (primaryRef && (primaryRef.includes(token) || token.includes(primaryRef))) return false;
+      return inferBrandFromReference(token);
+    });
   const reviewReason = new Set(inferredReferences).size > 1
     ? 'BUNDLE_PRICE_AMBIGUITY'
     : approved.length > 1 ? 'MULTIPLE_PRICE_AMBIGUITY' : null;
@@ -529,6 +552,7 @@ function isDateLikeReferenceToken(rawToken) {
 
 function cleanStockTokens(text) {
   return String(text)
+    .replace(/^\s*\d{4,6}\s*[-–—]\s*/, '')
     .replace(/(?:🔖|🏷️\s*stock|stock\s*#?|stk\s*#?|inv\s*#?)\s*[:=]?\s*[A-Za-z0-9_-]+/gi, ' ')
     .trim();
 }
@@ -545,6 +569,8 @@ function extractReference(line) {
   const cleaned = cleanStockTokens(line);
   const text = String(cleaned);
   const patterns = [
+    /\b(\d{2}\.\d{4}\.\d{3,4}(?:\/\d{2,4}\.[A-Z0-9.]+)?)\b/i,
+    /\b([A-Z]{3}\d{4}\.[A-Z0-9]+)\b/i,
     /\b(RM\s*\d{2,3}(?:-\d{2})?(?:\s*[A-Z0-9]+)?)\b/i,
     /\b(IW\d{6})\b/i,
     /\b(Q\d{7})\b/i,
