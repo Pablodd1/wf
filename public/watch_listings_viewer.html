@@ -1264,6 +1264,15 @@
         ALL_LISTINGS = chunk0;
         chunk0.forEach(it => listingsById.set(it.id, it));
 
+        // Inject persistent / seed dealer posts created via Post It
+        const savedPosts = loadPersistedDealerPosts();
+        savedPosts.forEach(post => {
+          if (!listingsById.has(post.id)) {
+            ALL_LISTINGS.unshift(post);
+            listingsById.set(post.id, post);
+          }
+        });
+
         handleHashChange();
         updateCounterUI();
 
@@ -1299,6 +1308,11 @@
             if (d.phone) dealersByPhone[d.phone.trim()] = d;
           });
           auxiliaryLoaded = true;
+          // Feed all persisted dealer posts into researchIndex
+          try {
+            const savedPosts = loadPersistedDealerPosts();
+            savedPosts.forEach(p => feedPostIntoPriceResearch(p));
+          } catch(e) {}
           if (currentView === 'dealers') renderDealersDirectory();
           if (currentView === 'trading-floor') renderListings();
         }).catch(err => {
@@ -2049,9 +2063,17 @@
             <!-- 2. Eyebrow & Title -->
             <div class="mt-4">
               <div class="flex items-center justify-between">
-                <span class="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#9E6B38]">
-                  ${item.category?.toUpperCase() || 'WATCH'}
-                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#9E6B38]">
+                    ${item.category?.toUpperCase() || 'WATCH'}
+                  </span>
+                  ${(item.is_live_post || item.origin === 'Dealer Portal (Post It)') ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-bold uppercase tracking-wider shadow-xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                      <span>Post It Live</span>
+                    </span>
+                  ` : ''}
+                </div>
                 ${isWTB ? `
                   <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
                     WTB / BUYER REQUEST
@@ -3148,6 +3170,159 @@
       }
     }
 
+    
+    // -------------------------------------------------------------
+    // POST IT: PERSISTENCE & PRICE RESEARCH FEED ENGINE
+    // -------------------------------------------------------------
+    const SEED_POST_IT_LISTING = {
+      id: "post_it_seed_camila_116500ln",
+      brand: "Rolex",
+      model: "Cosmograph Daytona",
+      reference: "116500LN",
+      dial: "White",
+      year: "2024",
+      condition: "New / Unworn",
+      price: 27500,
+      price_usd: 27500,
+      formatted_price: "$27,500",
+      type: "sale",
+      origin: "Dealer Portal (Post It)",
+      from_name: "Camila Alvarez",
+      from_number: "+1 305 555 0192",
+      created_on: "2026-09-12 13:15:00",
+      extracted_line: "Rolex Cosmograph Daytona 116500LN White Panda dial brand new complete box & papers $27,500",
+      image_url: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80",
+      location: "Miami, USA",
+      category: "Watches",
+      is_live_post: true
+    };
+
+    function loadPersistedDealerPosts() {
+      try {
+        const raw = localStorage.getItem('cl_live_dealer_posts');
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list) && list.length > 0) return list;
+        }
+      } catch (e) {
+        console.warn("Could not read cl_live_dealer_posts from localStorage", e);
+      }
+      // Return initial verified dealer post so user can immediately find it
+      return [SEED_POST_IT_LISTING];
+    }
+
+    function saveDealerPost(newListing) {
+      try {
+        const existing = loadPersistedDealerPosts().filter(p => p.id !== newListing.id);
+        existing.unshift(newListing);
+        localStorage.setItem('cl_live_dealer_posts', JSON.stringify(existing.slice(0, 50)));
+      } catch (e) {
+        console.warn("Could not save to localStorage", e);
+      }
+      // Also send to backend API folder (/api/ingest / /api/dealer-submissions)
+      try {
+        fetch('api/dealer-submissions.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            brand: newListing.brand,
+            model: newListing.model,
+            reference: newListing.reference,
+            price: newListing.price,
+            dial: newListing.dial,
+            dealer: newListing.from_name,
+            timestamp: newListing.created_on
+          })
+        }).catch(() => { /* silent fallback */ });
+      } catch (e) { /* ignore offline */ }
+    }
+
+    function feedPostIntoPriceResearch(post) {
+      if (!post || !post.reference) return;
+      const cleanKey = post.reference.toLowerCase().replace(/[^a-zA-Z0-9]/g, '');
+      const rec = researchIndex[cleanKey];
+      if (!rec) return;
+
+      const isSale = (post.type === 'sale' || post.type === 'WTS');
+      const price = Number(post.price || post.price_usd || 0);
+
+      if (isSale && price > 0) {
+        // 1. Prepend to qualified evidence rows (newest on top)
+        if (!rec.evidence_rows) rec.evidence_rows = [];
+        const alreadyIn = rec.evidence_rows.some(r => r.id === post.id);
+        if (!alreadyIn) {
+          rec.evidence_rows.unshift(post);
+        }
+        if (typeof evidenceByRef !== 'undefined' && evidenceByRef) {
+          if (!evidenceByRef[cleanKey]) evidenceByRef[cleanKey] = [];
+          const inEv = evidenceByRef[cleanKey].some(r => r.id === post.id);
+          if (!inEv) {
+            evidenceByRef[cleanKey].unshift(post);
+          }
+        }
+
+        // 2. Recompute cohorts: average price and observation counts
+        rec.total_observations = (rec.total_observations || 0) + 1;
+        if (!rec.cohorts) rec.cohorts = {};
+        if (!rec.cohorts['All Conditions']) {
+          rec.cohorts['All Conditions'] = {
+            total_count: 1, wts_count: 1, wtb_count: 0,
+            avg_price: price, median_price: price, min_price: price, max_price: price
+          };
+        } else {
+          const c = rec.cohorts['All Conditions'];
+          c.wts_count = (c.wts_count || 0) + 1;
+          c.total_count = (c.total_count || 0) + 1;
+          c.avg_price = Math.round(((c.avg_price * (c.wts_count - 1)) + price) / c.wts_count);
+          if (price < (c.min_price || Infinity)) c.min_price = price;
+          if (price > (c.max_price || 0)) c.max_price = price;
+        }
+
+        // 3. Add to historical chart timeline as newest observation
+        if (!rec.history_points) rec.history_points = [];
+        rec.history_points.push({
+          date: post.created_on ? post.created_on.split(' ')[0] : new Date().toISOString().split('T')[0],
+          price: price,
+          dial: post.dial || 'Standard',
+          dealer: post.from_name,
+          source: 'Post It'
+        });
+
+        // 4. Update dial comparison row
+        if (rec.dial_comparisons && post.dial) {
+          let dialRow = rec.dial_comparisons.find(d => d.dial && d.dial.toLowerCase() === post.dial.toLowerCase());
+          if (dialRow) {
+            dialRow.total_count = (dialRow.total_count || 0) + 1;
+            dialRow.avg_price = Math.round(((dialRow.avg_price * (dialRow.total_count - 1)) + price) / dialRow.total_count);
+          } else {
+            rec.dial_comparisons.push({
+              dial: post.dial,
+              total_count: 1,
+              avg_price: price,
+              min_price: price,
+              max_price: price,
+              hex_color: '#8A5826'
+            });
+          }
+        }
+      } else if (!isSale) {
+        // WTB Demand signal
+        if (!rec.demand_signals) rec.demand_signals = [];
+        rec.demand_signals.unshift({
+          id: post.id,
+          buyer: post.from_name || 'Verified Buyer',
+          budget: price > 0 ? price : 'Open budget',
+          dial: post.dial || 'Any',
+          date: post.created_on ? post.created_on.split(' ')[0] : new Date().toISOString().split('T')[0],
+          location: post.location || 'Global'
+        });
+        rec.wtb_count = (rec.wtb_count || 0) + 1;
+        if (rec.cohorts && rec.cohorts['All Conditions']) {
+          rec.cohorts['All Conditions'].wtb_count = (rec.cohorts['All Conditions'].wtb_count || 0) + 1;
+        }
+      }
+    }
+
     // "Post It" Workflow
     function handleNavPostItClick() {
       if (currentAuthSession.role !== 'dealer' || !currentAuthSession.dealer) {
@@ -3234,9 +3409,15 @@
         is_live_post: true
       };
 
-      // Add to front of floor listings in memory (live top of floor)
+      // 1. Add to front of floor listings in memory (live top of floor)
       ALL_LISTINGS.unshift(newListing);
       listingsById.set(newId, newListing);
+
+      // 2. Persist to storage & API
+      saveDealerPost(newListing);
+
+      // 3. Feed into Price Research analytics & historical charts
+      feedPostIntoPriceResearch(newListing);
 
       // Add to active dealer inventory
       if (!d.recent_inventory) d.recent_inventory = [];
