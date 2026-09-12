@@ -1,0 +1,11 @@
+{
+  "contract": "wf-authoritative-normalization-canary-manifest-v7",
+  "run_key": "authoritative-10k-canary-1788301198244",
+  "timestamp": "2026-09-01T22:19:58.244Z",
+  "cohort_size": 10000,
+  "artifacts": {
+    "canary-10k-normalization-report.json": "7e059a176471e1686ecaaf3ecb075479016355dbbeb69dbcc3aaeae6de7d5ce1",
+    "image-reachability-sample.json": "aff61fcb21509d6f3f7f1d03f0172b4a280698b72ec121de23fd534c91637691",
+    "proposals.jsonl": "d865571a8eccbce79aef3d5208fc9d23ffdc876a65da770d554ca6c129819a37"
+  }
+}

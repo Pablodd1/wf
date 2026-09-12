@@ -177,7 +177,7 @@ test('Trading Floor click-through shows source evidence and consent-gated dealer
   assert.match(page, /sellerAnalytics/);
   assert.match(page, /For sale/);
   assert.match(page, /Want to buy/);
-  assert.match(page, /Source-supplied contact/);
+  assert.match(page, /A verified, consented contact channel is not available for this listing/);
   assert.match(page, /ListingDealerEvidence/);
   assert.match(page, /contactPublicationApproved=\{listing\.contact_publication_approved === true\}/);
   assert.match(page, /ratingEvidenceStatus=\{listing\.seller_rating_evidence_status\}/);

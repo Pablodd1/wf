@@ -28,7 +28,7 @@ def get_db_connection():
     return pymysql.connect(
         host=os.environ.get('MYSQL_HOST', '161.35.0.209'),
         user=os.environ.get('MYSQL_USER', 'john'),
-        password=os.environ.get('MYSQL_PASS', 'U0aeAr1zFt2\\'),
+        password=os.environ['MYSQL_PASS'],
         database='thecollective_inventory',
         cursorclass=pymysql.cursors.SSDictCursor,
         charset='utf8mb4'

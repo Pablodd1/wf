@@ -4,7 +4,14 @@ const {
   REVIEWED_PANERAI_SOURCE,
   REVIEWED_ZENITH_SOURCE,
 } = require('./publication-references.cjs');
+const {
+  PUBLIC_IMAGE_EVIDENCE_TYPES,
+  CONTRACT_TO_PUBLIC_IMAGE_EVIDENCE,
+} = require('../../shared/listing-display-contract.cjs');
 
+// Public image evidence enum — must stay in exact parity with
+// shared/listing-display-contract.cjs PUBLIC_IMAGE_EVIDENCE_TYPES and with
+// the React display whitelist (src/pages/PriceResearch.tsx).
 const IMAGE_EVIDENCE = {
   NONE: 'NO_IMAGE',
   REFERENCE: 'REFERENCE_IMAGE',
@@ -88,5 +95,7 @@ function publicImageProvenance(record) {
 
 module.exports = {
   IMAGE_EVIDENCE,
+  PUBLIC_IMAGE_EVIDENCE_TYPES,
+  CONTRACT_TO_PUBLIC_IMAGE_EVIDENCE,
   publicImageProvenance,
 };

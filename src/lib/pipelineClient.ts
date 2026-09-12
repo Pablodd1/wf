@@ -159,10 +159,10 @@ export async function verifyImage(
   discrepancies: string[];
 }> {
   try {
-    const res = await fetch('/api/image-verify', {
+    const res = await fetch('/api/verify-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl, textParsed }),
+      body: JSON.stringify({ imageUrl, ...textParsed }),
     });
     const data = await res.json();
     if (!res.ok) {

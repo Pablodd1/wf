@@ -43,6 +43,13 @@ const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
+  LISTING_DISPLAY_CONTRACT_VERSION,
+  adaptLegacyListingDisplayV1,
+} = require('../shared/listing-display-contract.cjs');
+// EXPLICIT LEGACY CHOICE: this endpoint serves unproven legacy reviewed-inventory
+// rows without V2 source_id/source_hash provenance, so it adapts via the legacy V1
+// path (never stamped v2.0, never price-research eligible) instead of strict V2.
+const {
   PRICE_SELECTOR: CURATED_SHADOW_PRICE_SOURCE,
   isShadowBrand,
   loadPriceResearch: loadCuratedShadowPriceResearch,
@@ -1824,10 +1831,20 @@ module.exports = async function handler(req, res) {
       ...comparableEvidenceRows,
       ...outlierDealerEvidenceRows,
     ]);
-    const comparableRowsWithDealerEvidence = combinedDealerEvidenceRows.slice(0, comparableEvidenceRows.length);
-    const outlierRowsWithDealerEvidence = combinedDealerEvidenceRows.slice(
-      comparableEvidenceRows.length,
-    );
+    const comparableRowsWithDealerEvidence = combinedDealerEvidenceRows
+      .slice(0, comparableEvidenceRows.length)
+      .map(row => adaptLegacyListingDisplayV1({
+        ...row,
+        price_research_eligible: true,
+        included_in_statistics: true,
+      }));
+    const outlierRowsWithDealerEvidence = combinedDealerEvidenceRows
+      .slice(comparableEvidenceRows.length)
+      .map(row => adaptLegacyListingDisplayV1({
+        ...row,
+        price_research_eligible: false,
+        included_in_statistics: false,
+      }));
 
     const wtsEligibleAnalyticsCount = includedRows.length;
     const outliersCount = statisticalOutlierRows.length;
@@ -1879,6 +1896,10 @@ module.exports = async function handler(req, res) {
 
     res.status(200).json({
       success: true, brand, reference: rawRef,
+      listingDisplayContract: {
+        version: LISTING_DISPLAY_CONTRACT_VERSION,
+        null_policy: 'EXPLICIT_JSON_NULL',
+      },
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model, dialColors,
       analytics_source: usingReviewedWorkbook

@@ -3,7 +3,6 @@
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { listCanonicalCatalogReferences, listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
-const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
@@ -13,6 +12,13 @@ const { classifyWatchPartListing } = require('./_lib/watch-item-classification.c
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { extractReference, extractPriceObservations } = require('./_lib/normalization-v4.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const {
+  LISTING_DISPLAY_CONTRACT_VERSION,
+  adaptLegacyListingDisplayV1,
+} = require('../shared/listing-display-contract.cjs');
+// EXPLICIT LEGACY CHOICE: this endpoint serves unproven legacy reviewed-inventory
+// rows without V2 source_id/source_hash provenance, so it adapts via the legacy V1
+// path (never stamped v2.0, never price-research eligible) instead of strict V2.
 const {
   MARKET_SELECTOR: CURATED_SHADOW_MARKET_SOURCE,
   isShadowBrand,
@@ -771,6 +777,16 @@ function compareInventoryForDisplay(left, right) {
   const imageDifference = Number(hasExactSourceImage(right)) - Number(hasExactSourceImage(left));
   if (imageDifference !== 0) return imageDifference;
 
+  const verifiedPriceDifference = Number(hasVerifiedExplicitPrice(right))
+    - Number(hasVerifiedExplicitPrice(left));
+  if (verifiedPriceDifference !== 0) return verifiedPriceDifference;
+  if (hasVerifiedExplicitPrice(left) && hasVerifiedExplicitPrice(right)) {
+    const numericPriceDifference = Number(right.price_usd) - Number(left.price_usd);
+    if (Number.isFinite(numericPriceDifference) && numericPriceDifference !== 0) {
+      return numericPriceDifference;
+    }
+  }
+
   const rightDate = Date.parse(right?.listing_date || right?.created_at || '') || 0;
   const leftDate = Date.parse(left?.listing_date || left?.created_at || '') || 0;
   if (rightDate !== leftDate) return rightDate - leftDate;
@@ -782,9 +798,6 @@ function compareInventoryForDisplay(left, right) {
   if (intentDifference !== 0) return intentDifference;
   const dealerDifference = dealerEvidenceRank(right) - dealerEvidenceRank(left);
   if (dealerDifference !== 0) return dealerDifference;
-  const priceDifference = Number(hasVerifiedExplicitPrice(right))
-    - Number(hasVerifiedExplicitPrice(left));
-  if (priceDifference !== 0) return priceDifference;
   const completenessDifference = listingCompletenessScore(right) - listingCompletenessScore(left);
   if (completenessDifference !== 0) return completenessDifference;
 
@@ -1230,15 +1243,8 @@ function mapReviewedRecord(row) {
     : null;
   const directRating = positiveNumber(row.dealer_rating);
   const directReviewCount = Number(row.review_count || 0);
-  const publicRatedEvidence = ratedDealerEvidence({
-    dealerId: row.dealer_id || row.company_id,
-    phone: sellerPhone,
-  });
   const ratingEvidenceStatus = directRating !== null && directReviewCount > 0
-    ? 'SOURCE_SUPPLIED'
-    : publicRatedEvidence?.review_count > 0
-      ? 'SOURCE_FEEDBACK_COUNT'
-      : 'UNAVAILABLE';
+    ? 'SOURCE_SUPPLIED' : 'UNAVAILABLE';
   const referenceSearchKey = row.reference_search_key
     || referenceComparisonKey(reference)
     || null;
@@ -1372,14 +1378,15 @@ function mapReviewedRecord(row) {
     seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' ? directRating : null,
     seller_review_count: ratingEvidenceStatus === 'SOURCE_SUPPLIED'
       ? directReviewCount
-      : publicRatedEvidence?.review_count || 0,
+      : 0,
     seller_rating_evidence_status: ratingEvidenceStatus,
-    seller_trust_status: publicRatedEvidence?.trust_status || null,
+    seller_trust_status: null,
     // Legacy crawl provenance remains private; the public payload carries only
     // the source-backed rating/feedback result and canonical profile path.
     seller_rating_source_url: null,
     contact_publication_approved: contactApproved,
     price_usd: displayPriceUsd,
+    price_display_verified: publicVerifiedUsd !== null,
     effective_price_source: publicVerifiedUsd !== null
       ? (row.effective_price_source || 'VERIFIED_USD')
       : ownerAssumedUsd !== null
@@ -2516,7 +2523,15 @@ module.exports = async function handler(req, res) {
     queryParams.set('limit', String(qnsaBrandScanLimit));
     if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuc2Fmb3Nha3ZvbnpnZmNzcGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjI3NDEsImV4cCI6MjEwMTU5ODc0MX0.YUxMjnTHtgPsiWiWko3TS1A47Sjk33SuHC2TND0Rxmg';
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseKey) {
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      return res.status(503).json({
+        status: 'error',
+        code: 'CONFIGURATION_REQUIRED',
+        error: 'Database service key is not configured',
+      });
+    }
     const headers = {
       'apikey': supabaseKey,
       'Authorization': `Bearer ${supabaseKey}`,
@@ -3340,7 +3355,7 @@ module.exports = async function handler(req, res) {
     const publicBaseRecords = (reviewedOverlayLaneActive ? [] : records)
       .map(applyConfirmedFiveWatchPublication);
     const deduplicatedPage = deduplicateRecordsById([...publicBaseRecords, ...reviewedOverlayRecords]);
-    const combinedPageRecords = deduplicatedPage.records;
+    const combinedPageRecords = deduplicatedPage.records.map(adaptLegacyListingDisplayV1);
     const combinedPageDuplicateCount = deduplicatedPage.duplicateCount;
     // Serialize the cohort-wide count after the bounded page has been fetched,
     // mapped and filtered. Running both cold scans in parallel caused avoidable
@@ -3370,6 +3385,9 @@ module.exports = async function handler(req, res) {
       hasMore,
       nextCursor,
       records: combinedPageRecords,
+      availableCountries: [...new Set(combinedPageRecords
+        .map(record => postingCountryName(record.location))
+        .filter(Boolean))].sort((left, right) => left.localeCompare(right)),
       reviewedOverlayRecords,
       reviewedOverlay: {
         source: 'reviewed_workbook_inventory',
@@ -3387,6 +3405,10 @@ module.exports = async function handler(req, res) {
       summary,
       publicationBrands,
       evidenceContract: EVIDENCE_CONTRACT,
+      listingDisplayContract: {
+        version: LISTING_DISPLAY_CONTRACT_VERSION,
+        null_policy: 'EXPLICIT_JSON_NULL',
+      },
       coverage: summarizeCoverage(combinedPageRecords),
       displayPolicy: {
         unpriced_listings_visible: true,

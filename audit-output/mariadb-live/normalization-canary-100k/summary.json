@@ -1,0 +1,125 @@
+{
+  "contract": "wf-authoritative-100k-canary-summary-v1",
+  "job_name": "canary-100k-mariadb-norm-1788122514619",
+  "timestamp": "2026-08-30T20:49:50.896Z",
+  "parser_version": "authoritative-normalizer-v9-separated-status",
+  "frozen_upper_cursor": {
+    "created_on": "2026-04-28T15:50:43.000Z",
+    "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+  },
+  "checkpoint": {
+    "job_name": "canary-100k-mariadb-norm-1788122514619",
+    "frozen_cursor": {
+      "created_on": "2026-04-28T15:50:43.000Z",
+      "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+    },
+    "target_rows": 100000,
+    "status": "COMPLETED_DIAGNOSTIC",
+    "started_at": "2026-08-30T20:41:54.619Z",
+    "completed_at": "2026-08-30T20:49:50.891Z",
+    "last_processed_created_on": "2025-06-23T11:17:12.000Z",
+    "last_processed_source_id": "3e910c36-951b-4d64-a98d-4cb660040553",
+    "total_inputs_processed": 100000,
+    "normalized_proposals_count": 19724,
+    "review_required_count": 80276,
+    "normalization_errors_count": 0,
+    "trading_floor_eligible_count": 20916,
+    "price_research_eligible_count": 26
+  },
+  "counts": {
+    "total_inputs_processed": 100000,
+    "normalized_proposals": 19724,
+    "review_required": 80276,
+    "normalization_errors": 0,
+    "exact_reconciliation": true
+  },
+  "source_text_precedence_census": {
+    "resolved_from_description_count": 0,
+    "resolved_from_description_pct": "0.00%",
+    "resolved_from_title_count": 100000,
+    "resolved_from_title_pct": "100.00%",
+    "resolved_from_comments_count": 0,
+    "resolved_from_comments_pct": "0.00%",
+    "total_source_text_coverage_count": 100000,
+    "total_source_text_coverage_pct": "100.00%",
+    "missing_source_text_count": 0,
+    "missing_source_text_pct": "0.00%"
+  },
+  "eligibility": {
+    "trading_floor_eligible_count": 20916,
+    "trading_floor_eligible_pct": "20.92%",
+    "price_research_eligible_count": 26,
+    "price_research_eligible_pct": "0.03%"
+  },
+  "coverage": {
+    "source_image_keys_present_count": 99997,
+    "source_image_keys_present_pct": "100.00%",
+    "image_urls_published_count": 0,
+    "image_urls_published_pct": "0.00% (URLs held as null pending lineage proof)",
+    "seller_contact_exposed_count": 0,
+    "seller_contact_exposed_pct": "0.00% (Strictly private)",
+    "dealer_ratings_published_count": 0,
+    "dealer_ratings_published_pct": "0.00% (Held without explicit source review evidence)",
+    "explicit_usd_price_count": 1430,
+    "explicit_usd_price_pct": "1.43%",
+    "explicit_usdt_held_for_fx_count": 14451,
+    "explicit_hkd_held_for_fx_count": 5826,
+    "bare_dollar_held_count": 31255,
+    "unknown_intent_held_count": 78525,
+    "multi_offer_bundle_count": 3634
+  },
+  "status_distributions": {
+    "trading_floor_status": {
+      "HELD_INTENT_UNKNOWN": 75441,
+      "ELIGIBLE_WTB": 19661,
+      "ELIGIBLE_WTS": 1255,
+      "HELD_BUNDLE_UNSPLIT": 3634,
+      "HELD_IDENTITY_INCOMPLETE": 9
+    },
+    "price_research_status": {
+      "INELIGIBLE_TRADING_FLOOR_HOLD": 79084,
+      "INELIGIBLE_NOT_WTS": 19661,
+      "INELIGIBLE_AMBIGUOUS_CURRENCY": 873,
+      "INELIGIBLE_MISSING_PRICE": 307,
+      "INELIGIBLE_HKD_HELD_FOR_FX": 9,
+      "INELIGIBLE_IDENTITY_INCOMPLETE": 37,
+      "ELIGIBLE_VERIFIED_USD": 26,
+      "INELIGIBLE_USDT_HELD_FOR_FX": 3
+    },
+    "currency_status": {
+      "MISSING_PRICE": 43492,
+      "AMBIGUOUS_BARE_DOLLAR_HELD": 31255,
+      "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 14451,
+      "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 5826,
+      "VERIFIED_EXPLICIT_USD": 1430,
+      "VERIFIED_EXPLICIT_EUR": 2562,
+      "VERIFIED_EXPLICIT_SAR": 24,
+      "VERIFIED_EXPLICIT_GBP": 424,
+      "VERIFIED_EXPLICIT_AED": 512,
+      "VERIFIED_EXPLICIT_MYR": 4,
+      "VERIFIED_EXPLICIT_AUD": 16,
+      "VERIFIED_EXPLICIT_CNY": 1,
+      "VERIFIED_EXPLICIT_CHF": 2,
+      "VERIFIED_EXPLICIT_BRL": 1
+    }
+  },
+  "performance": {
+    "duration_ms": 476272,
+    "throughput_rows_per_sec": 209.96
+  },
+  "review_flags_breakdown": {
+    "UNKNOWN_INTENT": 75441,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 873,
+    "MISSING_PRICE_OR_CURRENCY": 307,
+    "HELD_BUNDLE_REVIEW": 3634,
+    "INCOMPLETE_IDENTITY": 9,
+    "HKD_HELD_FOR_FX_PROOF": 9,
+    "USDT_HELD_FOR_FX_PROOF": 3
+  },
+  "exclusion_reasons_breakdown": {
+    "INTENT_UNKNOWN_HELD_FROM_PUBLICATION": 75441,
+    "INTENT_NOT_WTS": 19661,
+    "BUNDLE_PARENT_UNSPLIT": 3634,
+    "IDENTITY_UNRECOGNIZED": 9
+  }
+}

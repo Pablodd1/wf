@@ -1,31 +1,64 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Star, Package, Paperclip, ArrowRight } from 'lucide-react';
+import { ArrowRight, MessageCircle } from 'lucide-react';
 import type { WatchRecord } from '@/types';
+import type { ListingDisplayContract } from '@/types/listing-display-contract';
 import { BrandBadge } from '@/components/ui/BrandBadge';
 import { ConditionBadge } from '@/components/ui/ConditionBadge';
-import { ConfidenceRing } from '@/components/ui/ConfidenceRing';
 import { DialColorSwatch } from '@/components/ui/DialColorSwatch';
-import { DemandBadge } from '@/components/ui/DemandBadge';
 
-interface WatchCardProps {
-  record: WatchRecord;
+export type WatchCardRecord = Partial<ListingDisplayContract>
+  & Omit<Partial<WatchRecord>, keyof ListingDisplayContract>
+  & { type?: string; isBundle?: boolean };
+
+interface WatchCardProps<T extends WatchCardRecord> {
+  record: T;
   index: number;
-  onSelect: (record: WatchRecord) => void;
+  onSelect: (record: T) => void;
 }
 
-export function WatchCard({ record, index, onSelect }: WatchCardProps) {
-  const confidencePct = Math.round(record.confidence ?? 0);
+export function WatchCard<T extends WatchCardRecord>({ record, index, onSelect }: WatchCardProps<T>) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const r = record;
 
-  const statusColor =
-    confidencePct >= 85
-      ? '#22C55E'
-      : confidencePct >= 70
-        ? '#F59E0B'
-        : '#EF4444';
+  // Requirement 8: Show USD ONLY when price_usd is verified.
+  // Show original currency text when supported. Never invent $fallback.
+  let priceDisplay = 'Price not supplied';
+  let priceSubtext: string | null = null;
 
-  const formattedPrice = record.price
-    ? `$${record.price.toLocaleString()}`
-    : '—';
+  if (r.price_status === 'VERIFIED_USD' && r.price_usd !== null && r.price_usd !== undefined) {
+    priceDisplay = `$${Number(r.price_usd).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  } else if (Number.isFinite(r.originalPrice) && Number(r.originalPrice) > 0 && r.originalCurrency) {
+    priceDisplay = `${r.originalCurrency} ${Number(r.originalPrice).toLocaleString()}`;
+  } else if (r.original_price_text) {
+    priceDisplay = r.original_price_text;
+    if (r.price_status === 'UNRESOLVED_CURRENCY') {
+      priceSubtext = 'Currency requires review';
+    }
+  } else if (r.original_price_amount && r.original_price_currency) {
+    priceDisplay = `${r.original_price_currency} ${r.original_price_amount.toLocaleString()}`;
+    if (r.price_status === 'UNRESOLVED_CURRENCY') {
+      priceSubtext = 'Currency requires review';
+    }
+  }
+
+  // Requirement 8: Intent labeling
+  const intentVal = r.intent || r.type;
+  const intentLabel = intentVal === 'WTS' ? 'WTS' : intentVal === 'WTB' ? 'WTB' : 'Intent unconfirmed';
+
+  // Requirement 8: When an image is missing or fails, remove the ENTIRE image container completely
+  const imageUrl = r.image_url || r.imageUrl;
+  const hasValidImage = Boolean(
+    imageUrl && 
+    r.image_status !== 'NO_IMAGE' && 
+    !imageFailed
+  );
+
+  // Bundle Labeling
+  const isBundle = Boolean(r.is_bundle || r.isBundle);
+  const bundleText = isBundle 
+    ? ((r.bundle_child_count || 0) > 0 ? `Bundle (${r.bundle_child_count} items)` : 'Multiple items — details pending') 
+    : null;
 
   return (
     <motion.div
@@ -41,105 +74,98 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       className="group relative bg-bg-card border border-border-default rounded-md p-4 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-gold hover:border-border-hover flex flex-col"
       style={{ willChange: 'transform' }}
     >
-      {/* Watch Image */}
-      <div className="w-full aspect-square bg-bg-elevated rounded-md mb-3 overflow-hidden flex items-center justify-center relative">
-        {record.imageUrl ? (
+      {/* Requirement 8: Remove ENTIRE image container if image is missing or fails */}
+      {hasValidImage ? (
+        <div className="w-full aspect-square bg-bg-elevated rounded-md mb-3 overflow-hidden flex items-center justify-center relative">
           <img
-            src={record.imageUrl}
-            alt={record.reference}
+            src={imageUrl!}
+            alt={r.reference || r.title || ''}
             className="w-full h-full object-cover"
             loading="lazy"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
+            onError={() => setImageFailed(true)}
           />
-        ) : (
-          <img
-            src="/watch-silhouette.svg"
-            alt="Watch"
-            className="w-3/5 h-3/5 object-contain opacity-30"
-          />
-        )}
-        {/* Status indicator dot */}
-        <span
-          className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full border-2 border-bg-card"
-          style={{
-            backgroundColor: statusColor,
-            boxShadow: `0 0 8px ${statusColor}40`,
-          }}
-        />
-        {/* Image Confirmed badge */}
-        {record.imageConfirmed && (
           <span className="absolute top-2 left-2 bg-success/90 text-black text-[8px] font-bold px-1.5 py-0.5 rounded">
             IMG ✓
           </span>
+        </div>
+      ) : (
+        /* Text-Only Card Header Banner when image container is removed */
+        <div className="w-full py-1.5 px-2 bg-bg-elevated/60 border border-border-default/50 rounded mb-3 flex items-center justify-between text-[10px] text-text-muted">
+          <span className="font-mono text-gold-muted font-semibold">TEXT-ONLY CARD</span>
+          <span className="px-1.5 py-0.5 bg-bg-card border border-border-default rounded text-[9px] text-text-secondary">
+            No Image Container
+          </span>
+        </div>
+      )}
+
+      {/* Top row: BrandBadge + ConditionBadge + Intent Badge */}
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          {r.brand && <BrandBadge brand={r.brand} />}
+          {r.condition && <ConditionBadge condition={r.condition} />}
+          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+            intentVal === 'WTS' ? 'bg-success/20 text-success border border-success/30' :
+            intentVal === 'WTB' ? 'bg-info/20 text-info border border-info/30' :
+            'bg-warning/20 text-warning border border-warning/30'
+          }`}>
+            {intentLabel}
+          </span>
+        </div>
+      </div>
+
+      {/* Bundle Warning Banner */}
+      {bundleText && (
+        <div className="mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-semibold rounded flex items-center justify-between">
+          <span>{bundleText}</span>
+        </div>
+      )}
+
+      {/* Reference number */}
+      <div className="font-mono text-base font-semibold text-text-primary leading-tight mb-1">
+        {record.reference || record.title || 'Reference Unspecified'}
+      </div>
+
+      {/* Family / Model badge */}
+      <div className="text-[10px] text-gold-muted uppercase tracking-[0.04em] font-semibold mb-2">
+        {record.model || record.category || 'Wristwatches'}
+      </div>
+
+      {/* Dial color row if present */}
+      {record.dial_color && (
+        <div className="flex items-center gap-2 mb-2">
+          <DialColorSwatch color={record.dial_color} size={12} />
+        </div>
+      )}
+
+      {/* Price Block */}
+      <div className="mb-3">
+        <div className={`font-mono text-lg font-bold ${
+          record.price_status === 'VERIFIED_USD' ? 'text-gold-primary' : priceSubtext ? 'text-warning' : 'text-text-muted'
+        }`}>
+          {priceDisplay}
+        </div>
+        {priceSubtext && (
+          <div className="text-[9px] font-semibold text-warning tracking-wide mt-0.5">
+            ⚠ {priceSubtext}
+          </div>
         )}
       </div>
 
-      {/* Top row: BrandBadge + ConditionBadge left, ConfidenceRing right */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <BrandBadge brand={record.brand} />
-          <ConditionBadge condition={record.condition} />
-        </div>
-        <ConfidenceRing percentage={record.confidence ?? 0} size={36} />
-      </div>
-
-      {/* Reference number */}
-      <div className="font-mono text-lg font-semibold text-text-primary leading-tight mb-1">
-        {record.reference}
-      </div>
-
-      {/* Family badge */}
-      <div className="text-[10px] text-gold-muted uppercase tracking-[0.04em] font-semibold mb-3">
-        {record.family}
-      </div>
-
-      {/* Dial color row */}
-      <div className="flex items-center gap-2 mb-3">
-        <DialColorSwatch color={record.dialColor} size={12} />
-      </div>
-
-      {/* Price */}
-      <div className="text-gold-primary font-mono text-xl font-bold mb-2">
-        {formattedPrice}
-      </div>
-
-      {/* Liquidity / Taxonomy Badge */}
-      <div className="mb-3 p-2 bg-bg-elevated rounded border border-border-default">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[9px] text-text-muted uppercase tracking-wider">B/S Ratio</span>
-          <span className="text-[9px] font-mono font-bold text-info">
-            {record.buyerSellerRatio?.toFixed(2) || 'N/A'}
-          </span>
-        </div>
-        <div className="w-full h-1.5 bg-[#1E1E2E] rounded-full overflow-hidden flex mb-1">
-          <div
-            className="h-full bg-[#3B82F6]"
-            style={{ width: `${Math.min(100, (record.buyerCount || 0) / Math.max((record.buyerCount || 0) + (record.sellerCount || 0), 1) * 100)}%` }}
-          />
-          <div
-            className="h-full bg-[#C9A96E]"
-            style={{ width: `${Math.min(100, (record.sellerCount || 0) / Math.max((record.buyerCount || 0) + (record.sellerCount || 0), 1) * 100)}%` }}
-          />
-        </div>
+      {/* Seller Information */}
+      <div className="mb-3 p-2 bg-bg-elevated/80 rounded border border-border-default/60 text-[10px]">
         <div className="flex items-center justify-between">
-          <span className="text-[8px] text-text-muted">
-            B:{record.buyerCount || 0} S:{record.sellerCount || 0}
+          <span className="text-text-secondary font-medium">
+            {record.seller_display_name || 'Posting identity requires review'}
           </span>
-          <span
-            className="text-[8px] font-bold px-1 rounded"
-            style={{
-              color: (record.liquidityScore || 0) >= 80 ? '#22C55E' : (record.liquidityScore || 0) >= 50 ? '#F59E0B' : '#6B7280',
-              background: `${(record.liquidityScore || 0) >= 80 ? '#22C55E' : (record.liquidityScore || 0) >= 50 ? '#F59E0B' : '#6B7280'}15`,
-            }}
-          >
-            LQ:{record.liquidityScore || 0}
-          </span>
+          {record.contact_available && (
+            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+              <MessageCircle size={10} /> Contact Ready
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Details row: Year, Box/Papers, Seller Rating */}
+      {/* Details row: Year */}
       <div className="flex items-center gap-4 flex-wrap text-[10px] text-text-secondary mb-3">
         {record.year && (
           <span className="flex items-center gap-1">
@@ -152,39 +178,18 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
             {record.year}
           </span>
         )}
-        <span className="flex items-center gap-1.5">
-          <Package
-            size={12}
-            className={record.hasBox ? 'text-success' : 'text-text-muted'}
-          />
-          <Paperclip
-            size={12}
-            className={record.hasPapers ? 'text-success' : 'text-text-muted'}
-          />
-        </span>
-        <span className="flex items-center gap-0.5">
-          {Array.from({ length: 5 }, (_, i) => (
-            <Star
-              key={i}
-              size={10}
-              className={
-                i < (record.sellerRating ?? 0)
-                  ? 'text-gold-primary fill-gold-primary'
-                  : 'text-bg-elevated fill-bg-elevated'
-              }
-            />
-          ))}
-        </span>
       </div>
 
       {/* Divider */}
       <div className="border-t border-border-default my-auto" />
 
-      {/* Bottom row: DemandBadge left, View link right */}
+      {/* Bottom row: View details link */}
       <div className="flex items-center justify-between pt-3 mt-auto">
-        <DemandBadge forecast={record.demandForecast} />
+        <span className="text-[10px] text-text-muted font-mono">
+          ID: {record.listing_id ? record.listing_id.slice(0, 12) : ''}
+        </span>
         <span className="flex items-center gap-1 text-[10px] text-gold-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          View <ArrowRight size={12} />
+          View Details <ArrowRight size={12} />
         </span>
       </div>
     </motion.div>

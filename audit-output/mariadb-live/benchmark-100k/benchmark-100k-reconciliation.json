@@ -1,0 +1,42 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "cohort_size": 100000,
+  "profiles": [
+    {
+      "profile": "w1_b250",
+      "concurrency": 1,
+      "input_rows": 100000,
+      "newly_staged_rows": 99500,
+      "already_staged_identical_rows": 500,
+      "error_rows": 0,
+      "exact_reconciliation": true
+    },
+    {
+      "profile": "w4_b250",
+      "concurrency": 4,
+      "input_rows": 100000,
+      "newly_staged_rows": 100000,
+      "already_staged_identical_rows": 0,
+      "error_rows": 0,
+      "exact_reconciliation": true
+    },
+    {
+      "profile": "w8_b250",
+      "concurrency": 8,
+      "input_rows": 100000,
+      "newly_staged_rows": 100000,
+      "already_staged_identical_rows": 0,
+      "error_rows": 0,
+      "exact_reconciliation": true
+    },
+    {
+      "profile": "w16_b250",
+      "concurrency": 16,
+      "input_rows": 100000,
+      "newly_staged_rows": 100000,
+      "already_staged_identical_rows": 0,
+      "error_rows": 0,
+      "exact_reconciliation": true
+    }
+  ]
+}

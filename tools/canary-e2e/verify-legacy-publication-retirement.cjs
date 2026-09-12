@@ -1,0 +1,34 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
+const {execFileSync}=require('node:child_process');const lit=s=>"'"+String(s).replaceAll("'","''")+"'";
+const repo=path.resolve(__dirname,'../..'),report={started_at:new Date().toISOString(),synthetic_only:true,production_contacted:false,databases:[]};
+for(const [container,database] of [['supabase_db_wf-final-disposable','postgres'],['wf-final-disposable-pg18','wf_production_forward_20260907']]){
+ const sql=q=>execFileSync('docker',['exec','-i',container,'psql','-X','-q','-U','postgres','-d',database,'-v','ON_ERROR_STOP=1','-At'],{input:q,encoding:'utf8',maxBuffer:10*1024*1024}).trim();
+ const doc=JSON.parse(sql("SELECT document FROM wf_canonical_staging.materialized_single_versions_v2 WHERE job_name LIKE 'SYNTHETIC-VERSION-%' AND outcome='ELIGIBLE' LIMIT 1;"));
+ const records=[1,2].map(i=>({...doc,listing_id:'SYNTHETIC-LEGACY-'+crypto.randomUUID(),source_id:'SYNTHETIC-OLD-'+crypto.randomUUID(),raw_message_id:'SYNTHETIC-LEGACY-RAW-'+i}));
+ const ids='ARRAY['+records.map(d=>lit(d.listing_id)).join(',')+']',key='SYNTHETIC-RETIRE-'+crypto.randomUUID();
+ const before=sql('SELECT count(*) FROM wf_canonical_staging.mariadb_canary_published_listings_v2;');
+ let script=fs.readFileSync(path.join(repo,'supabase/migrations/20260909100000_reversible_legacy_publication_retirement.sql'),'utf8').replace(/COMMIT;\s*$/,'');
+ script+='SELECT wf_canonical_staging.apply_publication_records_v2('+lit(JSON.stringify(records))+');';
+ const fingerprint="SELECT encode(sha256(convert_to(jsonb_agg(to_jsonb(v) ORDER BY listing_id)::text,'UTF8')),'hex') sha FROM wf_canonical_staging.mariadb_canary_published_listings_v2 v WHERE listing_id=ANY("+ids+')';
+ script+='CREATE TEMP TABLE synthetic_retirement_before ON COMMIT DROP AS '+fingerprint+';';
+ const revision='(SELECT revision FROM wf_canonical_staging.publication_revision WHERE singleton)';
+ const call='public.retire_legacy_publication_v2('+lit(key)+','+revision+','+ids+',(SELECT sha FROM synthetic_retirement_before))';
+ const reject=expr=>"DO $test$ BEGIN BEGIN PERFORM "+expr+"; RAISE EXCEPTION 'expected_retirement_refusal_missing'; EXCEPTION WHEN SQLSTATE '22023' THEN IF SQLERRM NOT IN('legacy_retirement_content_changed','legacy_retirement_exact_source_member_refused') THEN RAISE; END IF; END; END $test$;";
+ script+=reject('public.retire_legacy_publication_v2('+lit(key)+','+revision+','+ids+','+lit('f'.repeat(64))+')');
+ script+='SAVEPOINT exact_member;UPDATE wf_canonical_staging.mariadb_canary_published_listings_v2 SET raw_message_id='+lit(crypto.randomUUID())+' WHERE listing_id='+lit(records[0].listing_id)+';';
+ script+=reject(call)+'ROLLBACK TO exact_member;';
+ script+='SELECT '+call+';SELECT '+call+';';
+ script+="SELECT jsonb_build_object('remaining',count(*)) FROM wf_canonical_staging.mariadb_canary_published_listings_v2 WHERE listing_id=ANY("+ids+');';
+ script+='SELECT public.restore_legacy_publication_v2('+lit(key)+','+revision+');';
+ script+="SELECT jsonb_build_object('restored_exactly',(SELECT sha FROM synthetic_retirement_before)=("+fingerprint+'));';
+ script+='SELECT public.restore_legacy_publication_v2('+lit(key)+','+revision+');';
+ for(const role of ['anon','authenticated','service_role'])script+="SELECT jsonb_build_object('role',"+lit(role)+",'allowed',has_function_privilege("+lit(role)+",'public.retire_legacy_publication_v2(text,bigint,text[],text)','EXECUTE'));";
+ script+='ROLLBACK;';
+ const result=sql(script).split('\n').filter(s=>s.startsWith('{')).map(JSON.parse);
+ assert.equal(result[0].retired,2);assert.equal(result[1].replayed,true);assert.equal(result[2].remaining,0);assert.equal(result[3].restored,2);assert.equal(result[4].restored_exactly,true);assert.equal(result[5].replayed,true);
+ for(const r of result.slice(6))assert.equal(r.allowed,false);
+ assert.equal(sql('SELECT count(*) FROM wf_canonical_staging.mariadb_canary_published_listings_v2;'),before);
+ report.databases.push({container,database,status:'PASS',checks:['Reviewed legacy records archived with exact content digest before withdrawal','Changed content and exact raw-UUID members rejected','Retirement and restoration are replay-safe','Restored public documents exactly match their pre-retirement digest','Both snapshots prepared; customer/service execution denied; all fixtures rolled back']});
+}
+report.status='PASS';report.finished_at=new Date().toISOString();fs.writeFileSync(process.env.DISPOSABLE_REPORT_PATH,JSON.stringify(report,null,2));console.log(JSON.stringify(report));

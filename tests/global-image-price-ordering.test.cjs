@@ -26,8 +26,12 @@ test('bounded-page comparator ranks exact image then verified explicit price the
       price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
       thumbnail_url: 'https://example.com/1.jpg', image_urls: ['https://example.com/1.jpg'],
       image_evidence_type: 'SOURCE_LISTING_IMAGE', created_at: '2026-08-13T01:00:00Z' },
+    { id: '5', has_images: true, price_usd: 20_000, source_price_amount: 20_000,
+      price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+      thumbnail_url: 'https://example.com/5.jpg', image_urls: ['https://example.com/5.jpg'],
+      image_evidence_type: 'SOURCE_LISTING_IMAGE', created_at: '2026-08-12T01:00:00Z' },
   ];
-  assert.deepEqual(records.sort(api.compareInventoryForDisplay).map(row => row.id), ['1', '2', '3', '4']);
+  assert.deepEqual(records.sort(api.compareInventoryForDisplay).map(row => row.id), ['5', '1', '2', '3', '4']);
 });
 
 test('forward migration aligns every active QNSA Trading Floor RPC', () => {

@@ -19,7 +19,9 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
-import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import { canaryBrowseEnabled, loadPublishedBrowse, publishedBrowseBrand } from '../utils/publishedBrowse';
+import { ambiguousPriceDisplay, strongestPostingIdentity, listingAvailabilityLabel } from '../lib/customerEvidence';
+import { useLanguage } from '../i18n/LanguageContext';
 import {
   loadPriceResearchBatchSummaries,
   priceResearchSummaryKey,
@@ -92,9 +94,14 @@ const SORT_OPTIONS = [
   { label: 'Discovery mix', value: 'discovery' },
 ] as const;
 
-import { MarketTickerBanner } from '../components/MarketTickerBanner';
+function serializeLocations(locations: string[]) {
+  return locations.length ? (canaryBrowseEnabled ? JSON.stringify(locations) : locations.join(',')) : null;
+}
 
-interface ListingRecord {
+import { MarketTickerBanner } from '../components/MarketTickerBanner';
+import type { ListingDisplayContract } from '../types/listing-display-contract';
+
+interface ListingRecord extends Partial<ListingDisplayContract> {
   id: string;
   brand: string;
   model?: string | null;
@@ -114,7 +121,7 @@ interface ListingRecord {
   dial_color: string | null;
   condition: string | null;
   year: number | null;
-  intent?: string | null;
+  intent?: 'WTS' | 'WTB' | null;
   listing_type: string;
   verdict: string | null;
   source: string;
@@ -161,6 +168,8 @@ interface ListingRecord {
   seller_country?: string | null;
   posted_by?: string | null;
   source_identity_name?: string | null;
+  model_evidence_type?: string | null;
+  model_requires_review?: boolean;
   phone_number?: string | null;
   'Posted By'?: string | null;
   'Phone Number'?: string | null;
@@ -179,6 +188,7 @@ interface TradingFloorResponse {
   nextCursor?: string | null;
   hasMore?: boolean;
   publicationBrands?: string[];
+  availableCountries?: string[];
   release_status?: string;
   source?: string;
 }
@@ -343,10 +353,14 @@ async function loadRandomAllInventory({
     if (imagesOnly) params.set('images', 'true');
     if (pricedOnly) params.set('priced', 'true');
     if (countries.length > 0) params.set('region', countries.join(','));
-    params.set('sourceShape', listingLane);
-    const brandCursor = decoded?.brandCursors?.[brand];
-    if (brandCursor) params.set('cursor', brandCursor);
-    const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
+    const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+    if (!canaryEnabled) {
+      params.set('sourceShape', listingLane);
+      const brandCursor = decoded?.brandCursors?.[brand];
+      if (brandCursor) params.set('cursor', brandCursor);
+    }
+    const inventoryEndpoint = canaryEnabled ? '/api/canary/trading-floor' : '/api/reviewed-market-inventory';
+    const response = await fetch(`${inventoryEndpoint}?${params.toString()}`, { signal });
     const payload = response.ok ? await response.json() as TradingFloorResponse : { status: 'error' };
     return { brand, payload };
   }));
@@ -476,6 +490,7 @@ function hasAllowedImageEvidence(listing: ListingRecord) {
 }
 
 export default function TradingFloor() {
+  const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedCategory = searchParams.get('item');
   const requestedIntent = searchParams.get('type')?.toUpperCase();
@@ -488,18 +503,27 @@ export default function TradingFloor() {
     : '';
   const sortMode: SortMode = requestedSort === 'discovery' ? 'discovery' : 'newest';
   const search = searchParams.get('q') || '';
-  const requestedBrand = searchParams.get('brand') || '';
+  const requestedBrand = canaryBrowseEnabled ? publishedBrowseBrand(searchParams.get('brand') || '') : searchParams.get('brand') || '';
   const modelFilter = searchParams.get('model') || '';
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
   const requestedLocationParam = searchParams.get('location') || '';
   const locationFilters = useMemo(() => {
     if (!requestedLocationParam) return [];
+    if (canaryBrowseEnabled && requestedLocationParam.startsWith('[')) {
+      try {
+        const values: unknown = JSON.parse(requestedLocationParam);
+        return Array.isArray(values) ? values.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())) : [];
+      } catch { return []; }
+    }
     return requestedLocationParam.split(',').map(s => s.trim()).filter(Boolean);
   }, [requestedLocationParam]);
 
-  const [releaseBrands, setReleaseBrands] = useState<string[]>(MASTER_BRAND_LIST);
+  const [releaseBrands, setReleaseBrands] = useState<string[]>(canaryBrowseEnabled ? [] : MASTER_BRAND_LIST);
+  const browseSnapshotRef = useRef<string | undefined>(undefined);
   const [modelOptions, setModelOptions] = useState<CatalogModelOption[]>([]);
+  const [browseError, setBrowseError] = useState(false);
+  const [browseAttempt, setBrowseAttempt] = useState(0);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
@@ -540,6 +564,7 @@ export default function TradingFloor() {
     sortMode !== 'newest',
   ].filter(Boolean).length;
   const locationOptions = useMemo(() => {
+    if (canaryBrowseEnabled) return [...new Set([...locationFilters, ...discoveredLocations])].sort((a, b) => a.localeCompare(b));
     const countries = listings
       .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
       .filter((value): value is string => Boolean(value));
@@ -551,6 +576,7 @@ export default function TradingFloor() {
   const dynamicDisplayTotal = total !== null && total >= 0 ? total : null;
 
   const visibleListings = useMemo(() => {
+    if (import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') return listings;
     if (sortMode === 'newest') return [...listings].sort(newestObservedOrder);
     if (combinedFeedActive) return listings;
     return discoveryOrderWithinSourceLanes(listings, 0x57fa2c1d, cursorHistory.length + 1);
@@ -569,7 +595,7 @@ export default function TradingFloor() {
       chips.push({
         key: `location-${location}`,
         label: location,
-        updates: { location: remaining.length ? remaining.join(',') : null },
+        updates: { location: serializeLocations(remaining) },
       });
     }
     return chips;
@@ -596,6 +622,24 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setBrowseError(false);
+    if (canaryBrowseEnabled) {
+      setModelOptions([]);
+      void loadPublishedBrowse('trading_floor', brandFilter, '', controller.signal, browseSnapshotRef.current)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          browseSnapshotRef.current = payload.snapshot_id;
+          setReleaseBrands(payload.brands.map(item => item.brand));
+          setModelOptions(payload.models);
+          setDiscoveredLocations(payload.availableRegions || []);
+        })
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setModelOptions([]);
+          setBrowseError(true);
+        });
+      return () => controller.abort();
+    }
     if (!brandFilter) {
       setModelOptions([]);
       return () => controller.abort();
@@ -609,7 +653,7 @@ export default function TradingFloor() {
         if (error?.name !== 'AbortError') setModelOptions([]);
       });
     return () => controller.abort();
-  }, [brandFilter]);
+  }, [brandFilter, browseAttempt]);
 
   const openListing = useCallback((listing: ListingRecord) => {
     listScrollPositionRef.current = window.scrollY;
@@ -714,7 +758,7 @@ export default function TradingFloor() {
     const unique = new Map<string, PriceResearchBatchPair>();
     for (const listing of visibleListings) {
       if (!listing.brand || !listing.reference || String(listing.listing_type).toUpperCase() !== 'WTS') continue;
-      const pair = { brand: listing.brand, reference: listing.reference, dial: cleanValue(listing.dial_color) || null };
+      const pair = listingPricePair(listing);
       unique.set(priceResearchSummaryKey(pair), pair);
     }
     return [...unique.values()];
@@ -795,7 +839,9 @@ export default function TradingFloor() {
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
         if (pricedOnly) params.set('priced', 'true');
-        if (locationFilters.length > 0) params.set('region', locationFilters.join(','));
+        if (locationFilters.length > 0) {
+          params.set(canaryBrowseEnabled ? 'regions' : 'region', canaryBrowseEnabled ? JSON.stringify(locationFilters) : locationFilters.join(','));
+        }
 
         const usesReviewedWatchInventory = ['all', 'watches'].includes(categoryFilter);
         if (!usesReviewedWatchInventory) {
@@ -806,8 +852,10 @@ export default function TradingFloor() {
           params.delete('model');
           params.delete('type');
         }
-        const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
-        const combinedAllInventory = combinedFeedActive;
+        const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        if (canaryEnabled && sortMode === 'discovery') params.set('sort', 'discovery');
+        const endpoint = canaryEnabled ? '/api/canary/trading-floor' : (usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest');
+        const combinedAllInventory = !canaryEnabled && combinedFeedActive;
         let data: TradingFloorResponse;
         try {
           if (combinedAllInventory) {
@@ -844,15 +892,18 @@ export default function TradingFloor() {
         let totalCount: number | null = null;
 
         if (data.status === 'ok' && Array.isArray(data.records)) {
-          if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
+          if (!canaryEnabled && Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
             const validBrandStrings = data.publicationBrands
               .map((b: any) => typeof b === 'string' ? b : (typeof b?.brand === 'string' ? b.brand : ''))
               .filter(Boolean);
             setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...validBrandStrings])]);
-          } else {
+          } else if (!canaryEnabled) {
             setReleaseBrands(MASTER_BRAND_LIST);
           }
           nextListings = data.records;
+          if (!canaryEnabled && Array.isArray(data.availableCountries)) {
+            setDiscoveredLocations(current => [...new Set([...current, ...data.availableCountries!.filter(Boolean)])].sort((a, b) => a.localeCompare(b)));
+          }
           totalCount = data.total == null ? null : Number(data.total);
           setTotalIsEstimate(Boolean(data.totalIsEstimate));
           setNextCursor(data.nextCursor || null);
@@ -865,7 +916,7 @@ export default function TradingFloor() {
         const nextCountries = nextListings
           .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
           .filter((value): value is string => Boolean(value));
-        if (nextCountries.length > 0) {
+        if (!canaryEnabled && nextCountries.length > 0) {
           setDiscoveredLocations(current => [...new Set([...current, ...nextCountries])].sort((a, b) => a.localeCompare(b)));
         }
         setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
@@ -889,19 +940,29 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
+      {/* The V2 API is also used in production; only disposable data receives this label. */}
+      {import.meta.env.VITE_DISPOSABLE_PREVIEW === 'true' && (
+        <div
+          data-testid="preview-fixture-banner"
+          role="status"
+          style={{ background: '#7F1D1D', color: '#FEF3C7', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+        >
+          Disposable preview data — not live market data
+        </div>
+      )}
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
+              <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>{t('Trading Floor')}</h1>
               <p className="mt-1 text-sm font-medium" style={{ color: MUTED }}>
-                {dynamicDisplayTotal === null ? 'Listing total unavailable' : `${dynamicDisplayTotal.toLocaleString()} verified listings`}
+                {dynamicDisplayTotal === null ? t('Listing total unavailable') : `${dynamicDisplayTotal.toLocaleString()} ${t('verified listings')}`}
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <ViewButton active={viewMode === 'grid'} label="Grid" onClick={() => setViewMode('grid')} icon={<Grid size={16} />} />
-              <ViewButton active={viewMode === 'list'} label="List" onClick={() => setViewMode('list')} icon={<List size={16} />} />
+              <ViewButton active={viewMode === 'grid'} label={t('Grid')} onClick={() => setViewMode('grid')} icon={<Grid size={16} />} />
+              <ViewButton active={viewMode === 'list'} label={t('List')} onClick={() => setViewMode('list')} icon={<List size={16} />} />
             </div>
           </div>
 
@@ -939,7 +1000,7 @@ export default function TradingFloor() {
                     }
                   }
                 }}
-                placeholder="Search exact reference, model, message, or poster"
+                placeholder={t('Search exact reference, model, message, or poster')}
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
                 role="combobox"
@@ -996,89 +1057,11 @@ export default function TradingFloor() {
             </button>
           </div>
 
-          <div className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs" style={{ color: MUTED }}>
-            <span>Search observed references directly; catalog match is optional.</span>
-            {!search && !brandFilter && ['all', 'watches'].includes(categoryFilter) && (
-              <div className="flex flex-wrap gap-1.5" aria-label="Search help">
-                {([
-                  { label: 'Rolex', updates: { brand: 'Rolex' } },
-                  { label: 'Patek Philippe', updates: { brand: 'Patek Philippe' } },
-                  { label: 'For sale', updates: { type: 'WTS' } },
-                  { label: 'Want to buy', updates: { type: 'WTB' } },
-                ] as Array<{ label: string; updates: Record<string, string | null> }>).map(item => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      resetResults();
-                      updateViewParams(item.updates);
-                    }}
-                    className="rounded-full border bg-white px-2.5 py-1 font-medium hover:border-[#9A7127] hover:text-[#7B5719]"
-                    style={{ borderColor: BORDER }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Category & Intent Tabs */}
-          <div className="flex flex-col gap-3 pt-1">
-            {/* Category Tabs */}
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-[#3f3324]/10 pb-2.5">
-              {CATEGORY_OPTIONS.map(option => {
-                const active = categoryFilter === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      resetResults();
-                      updateViewParams({ item: option.value === 'all' ? null : option.value });
-                    }}
-                    className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                      active
-                        ? 'bg-[#9A7127] text-white shadow-sm'
-                        : 'bg-white/80 text-[#6B7280] hover:bg-white hover:text-[#171717] border border-[#DED8CD]'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Intent Tabs */}
-            <div className="flex flex-wrap items-center gap-2">
-              {INTENT_OPTIONS.map(option => {
-                const active = (intentFilter || '') === (option.value || '');
-                return (
-                  <button
-                    key={option.value || 'all'}
-                    type="button"
-                    onClick={() => {
-                      resetResults();
-                      updateViewParams({ type: option.value || null });
-                    }}
-                    className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
-                      active
-                        ? 'bg-[#211B15] text-[#F3ECDF] font-semibold shadow-xs'
-                        : 'bg-white/60 text-[#675B4D] hover:bg-white border border-[#DED8CD]'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           <CurrencyConverter compact />
 
           <div className="flex flex-wrap items-center gap-2" aria-label="Current search and filters">
             <span className="inline-flex min-h-8 items-center rounded-full border bg-[#211B15] px-3 text-xs font-semibold text-[#F3ECDF]">
-              {sortMode === 'newest' ? 'Newest observed' : 'Discovery mix'}
+              {t(sortMode === 'newest' ? 'Newest observed' : 'Discovery mix')}
             </span>
             {activeFilterChips.map(chip => (
               <button
@@ -1105,6 +1088,9 @@ export default function TradingFloor() {
           releaseBrands={releaseBrands}
           model={modelFilter}
           models={modelOptions}
+          browseSnapshot={browseSnapshotRef.current}
+          browseError={browseError}
+          onBrowseRetry={() => setBrowseAttempt(value => value + 1)}
           category={categoryFilter}
           intent={intentFilter}
           sort={sortMode}
@@ -1117,13 +1103,13 @@ export default function TradingFloor() {
             resetResults();
             updateViewParams({
               brand: next.brand || null,
-              model: next.brand === brandFilter ? next.model || null : null,
+              model: next.model || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               sort: next.sort === 'newest' ? null : next.sort,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
-              location: next.locations.length ? next.locations.join(',') : null,
+              location: serializeLocations(next.locations),
             }, false);
           }}
           onClose={() => setFiltersOpen(false)}
@@ -1133,9 +1119,16 @@ export default function TradingFloor() {
       <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
-            Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> on this page{dynamicDisplayTotal === null ? ' · total unavailable' : <> of <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> listings</>}
+            {t('Showing')} <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> {t('on this page')}{dynamicDisplayTotal === null ? ` · ${t('total unavailable')}` : <> {t('of')} <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> {t('listings')}</>}
           </span>
+          <span>{t('Priced listings first; source images next; highest verified USD price within each group.')}</span>
           {error && <span style={{ color: RED }}>{error}</span>}
+          {browseError && (
+            <span role="alert" style={{ color: RED }}>
+              {t("Watch filters couldn't load.")}{' '}
+              <button type="button" aria-label="Retry watch filters" onClick={() => setBrowseAttempt(value => value + 1)} className="font-semibold underline">{t('Retry')}</button>
+            </span>
+          )}
         </div>
 
         {selectedListing ? (
@@ -1143,11 +1136,7 @@ export default function TradingFloor() {
             key={selectedListing.id}
             listing={selectedListing}
             benchmark={
-              ratingsCache[priceResearchSummaryKey({
-                brand: selectedListing.brand,
-                reference: selectedListing.reference || '',
-                dial: cleanValue(selectedListing.dial_color) || null,
-              })]
+              ratingsCache[priceResearchSummaryKey(listingPricePair(selectedListing))]
             }
             onClose={closeListing}
           />
@@ -1189,11 +1178,7 @@ export default function TradingFloor() {
                 : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
               >
                 {visibleListings.map(listing => {
-                  const ratingKey = priceResearchSummaryKey({
-                    brand: listing.brand,
-                    reference: listing.reference || '',
-                    dial: cleanValue(listing.dial_color) || null,
-                  });
+                  const ratingKey = priceResearchSummaryKey(listingPricePair(listing));
                   const benchmark = ratingsCache[ratingKey];
                   return (
                     <ListingCard
@@ -1223,9 +1208,9 @@ export default function TradingFloor() {
               className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
               style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
             >
-              Previous
+              {t('Previous')}
             </button>
-            <span className="text-sm" style={{ color: MUTED }}>Page {cursorHistory.length + 1}</span>
+            <span className="text-sm" style={{ color: MUTED }}>{t('Page')} {cursorHistory.length + 1}</span>
             <button
               type="button"
               onClick={() => {
@@ -1237,7 +1222,7 @@ export default function TradingFloor() {
               className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
               style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
             >
-              {loading ? 'Loading...' : 'Next'}
+              {loading ? t('Loading...') : t('Next')}
             </button>
           </nav>
         )}
@@ -1319,6 +1304,7 @@ function DesktopFilters({
   locations: string[];
   onChange: (updates: Record<string, string | null>) => void;
 }) {
+  const { t } = useLanguage();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
 
@@ -1336,7 +1322,7 @@ function DesktopFilters({
     const updated = selectedLocations.includes(loc)
       ? selectedLocations.filter(value => value !== loc)
       : [...selectedLocations, loc];
-    onChange({ location: updated.length ? updated.join(',') : null });
+    onChange({ location: serializeLocations(updated) });
   };
 
   const hasActiveFilters = Boolean(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0 || sort !== 'newest');
@@ -1345,7 +1331,7 @@ function DesktopFilters({
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2 border-b pb-3" style={{ borderColor: BORDER }}>
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
+          <h2 className="text-base font-semibold" style={{ color: INK }}>{t('Filters')}</h2>
           {hasActiveFilters && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#9A7127] text-white">
               {[Boolean(brand), Boolean(model), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0, sort !== 'newest'].filter(Boolean).length}
@@ -1359,7 +1345,7 @@ function DesktopFilters({
               onClick={() => onChange({ brand: null, model: null, item: null, type: null, images: null, priced: null, location: null, sort: null })}
               className="text-xs font-semibold text-[#7B5719] hover:underline"
             >
-              Clear
+              {t('Clear')}
             </button>
           )}
           <button
@@ -1377,7 +1363,7 @@ function DesktopFilters({
       {!isCollapsed ? (
         <div className="space-y-6 transition-all duration-200">
           <fieldset>
-            <label htmlFor="sort-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Order</label>
+            <label htmlFor="sort-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Order')}</label>
             <select
               id="sort-filter"
               value={sort}
@@ -1385,20 +1371,32 @@ function DesktopFilters({
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
               style={{ borderColor: BORDER, color: INK }}
             >
-              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
             </select>
-            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>{t('Newest observed is the default. Discovery mix changes order only.')}</p>
           </fieldset>
 
           <fieldset>
-            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
-            {INTENT_OPTIONS.map(option => (
-              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
+            <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Category')}</legend>
+            {CATEGORY_OPTIONS.map(option => (
+              <FilterCheck
+                key={option.value}
+                checked={category === option.value}
+                label={t(option.label)}
+                onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: ['all', 'watches'].includes(option.value) ? intent || null : null })}
+              />
             ))}
           </fieldset>
 
           <fieldset>
-            <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand ({releaseBrands.length})</label>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Listing type')}</legend>
+            {INTENT_OPTIONS.map(option => (
+              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={t(option.label)} onChange={() => onChange({ type: option.value || null })} />
+            ))}
+          </fieldset>
+
+          <fieldset>
+            <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Brand')} ({releaseBrands.length})</label>
             <select
               id="brand-filter"
               value={brand}
@@ -1406,29 +1404,29 @@ function DesktopFilters({
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
               style={{ borderColor: BORDER, color: INK }}
             >
-              <option value="">All brands</option>
+              <option value="">{t('All brands')}</option>
               {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
             </select>
           </fieldset>
 
           <fieldset>
-            <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Model ({models.length})</label>
+            <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Model')} ({models.length})</label>
             <select
               id="model-filter"
-              value={model}
+              value={models.find(option => option.model.toLowerCase() === model.toLowerCase())?.model || model}
               disabled={!brand || models.length === 0}
               onChange={event => onChange({ model: event.target.value || null })}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs disabled:opacity-45"
               style={{ borderColor: BORDER, color: INK }}
             >
-              <option value="">All models</option>
+              <option value="">{t('All models')}</option>
               {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
           </fieldset>
 
           <fieldset>
             <div className="flex items-center justify-between mb-2">
-              <legend className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location {selectedLocations.length > 0 && `(${selectedLocations.length})`}</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Location')} {selectedLocations.length > 0 && `(${selectedLocations.length})`}</legend>
               {selectedLocations.length > 0 && (
                 <button type="button" onClick={() => toggleLocation('')} className="text-[10px] font-semibold text-[#7B5719] hover:underline">Clear</button>
               )}
@@ -1455,21 +1453,21 @@ function DesktopFilters({
                 type="text"
                 value={locationSearch}
                 onChange={e => setLocationSearch(e.target.value)}
-                placeholder="Search locations..."
+                placeholder={t('Search locations...')}
                 className="h-8 w-full rounded border bg-white pl-8 pr-2.5 text-xs outline-none focus:border-[#9A7127]"
                 style={{ borderColor: BORDER, color: INK }}
               />
             </div>
             {filteredLocations.length === 0 && locations.length === 0 ? (
-              <p className="text-xs italic" style={{ color: MUTED }}>No location data available</p>
+              <p className="text-xs italic" style={{ color: MUTED }}>{t('No location data available')}</p>
             ) : filteredLocations.length === 0 ? (
-              <p className="text-xs italic py-2 text-center" style={{ color: MUTED }}>No matching locations</p>
+              <p className="text-xs italic py-2 text-center" style={{ color: MUTED }}>{t('No matching locations')}</p>
             ) : (
               <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded border bg-stone-50/60 shadow-inner hide-scrollbar" style={{ borderColor: BORDER }}>
                 {!locationSearch && (
                   <FilterCheck
                     checked={selectedLocations.length === 0}
-                    label="All locations"
+                    label={t('All locations')}
                     onChange={() => toggleLocation('')}
                   />
                 )}
@@ -1483,13 +1481,12 @@ function DesktopFilters({
                 ))}
               </div>
             )}
-            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Choose one or several posting countries. Countries are shown only from source-backed listing or poster data.</p>
           </fieldset>
 
           <fieldset>
-            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Evidence</legend>
-            <FilterCheck checked={imagesOnly} label="Verified source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
-            <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Evidence')}</legend>
+            <FilterCheck checked={imagesOnly} label={t('Verified source image only')} onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+            <FilterCheck checked={pricedOnly} label={t('Price supplied')} onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
           </fieldset>
         </div>
       ) : (
@@ -1506,6 +1503,9 @@ function MobileFilterSheet({
   releaseBrands,
   model,
   models,
+  browseSnapshot,
+  browseError,
+  onBrowseRetry,
   category,
   intent,
   sort,
@@ -1520,6 +1520,9 @@ function MobileFilterSheet({
   releaseBrands: string[];
   model: string;
   models: CatalogModelOption[];
+  browseSnapshot?: string;
+  browseError: boolean;
+  onBrowseRetry: () => void;
   category: CategoryFilter;
   intent: IntentFilter;
   sort: SortMode;
@@ -1530,8 +1533,13 @@ function MobileFilterSheet({
   onApply: (filters: { brand: BrandFilter; model: string; category: CategoryFilter; intent: IntentFilter; sort: SortMode; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftModel, setDraftModel] = useState(model);
+  const [draftModels, setDraftModels] = useState(models);
+  const [draftModelsError, setDraftModelsError] = useState(false);
+  const [draftBrowseAttempt, setDraftBrowseAttempt] = useState(0);
+  const draftBrowseSnapshotRef = useRef(browseSnapshot);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftSort, setDraftSort] = useState(sort);
@@ -1539,6 +1547,42 @@ function MobileFilterSheet({
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
   const [draftLocations, setDraftLocations] = useState<string[]>(selectedLocations);
   const [mobileLocationSearch, setMobileLocationSearch] = useState('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setDraftModelsError(false);
+    if (draftBrand === brand) {
+      setDraftModels(models);
+      return () => controller.abort();
+    }
+    setDraftModels([]);
+    if (!draftBrand) return () => controller.abort();
+    if (canaryBrowseEnabled) {
+      void loadPublishedBrowse('trading_floor', draftBrand, '', controller.signal, draftBrowseSnapshotRef.current)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          draftBrowseSnapshotRef.current = payload.snapshot_id;
+          setDraftModels(payload.models);
+        })
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setDraftModels([]);
+          setDraftModelsError(true);
+        });
+    } else {
+      fetch(`/api/catalog-models?brand=${encodeURIComponent(draftBrand)}`, { signal: controller.signal })
+        .then(async response => response.ok ? response.json() : null)
+        .then(payload => {
+          if (!controller.signal.aborted) setDraftModels(Array.isArray(payload?.models) ? payload.models : []);
+        })
+        .catch(error => {
+          if (controller.signal.aborted || error?.name === 'AbortError') return;
+          setDraftModels([]);
+          setDraftModelsError(true);
+        });
+    }
+    return () => controller.abort();
+  }, [brand, draftBrand, models, draftBrowseAttempt]);
 
   const filteredMobileLocations = useMemo(() => {
     const q = mobileLocationSearch.trim().toLowerCase();
@@ -1567,22 +1611,36 @@ function MobileFilterSheet({
         style={{ borderColor: BORDER, background: SURFACE, color: INK }}
       >
         <header className="flex h-16 shrink-0 items-center justify-between border-b px-5" style={{ borderColor: BORDER }}>
-          <h2 id="mobile-filter-title" className="text-lg font-semibold">Filter inventory</h2>
+          <h2 id="mobile-filter-title" className="text-lg font-semibold">{t('Filter inventory')}</h2>
           <button type="button" onClick={onClose} aria-label="Close filters" className="flex h-11 w-11 items-center justify-center rounded-md border" style={{ borderColor: BORDER }}>
             <X size={20} />
           </button>
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
-          <FilterGroup label="Order">
+          {browseError && (
+            <div role="alert" className="text-sm" style={{ color: RED }}>
+              {t("Watch filters couldn't load.")}{' '}
+              <button type="button" aria-label="Retry watch filters" onClick={onBrowseRetry} className="font-semibold underline">{t('Retry')}</button>
+            </div>
+          )}
+          <FilterGroup label={t('Order')}>
             {SORT_OPTIONS.map(option => (
-              <FilterChoice key={option.value} active={draftSort === option.value} label={option.label} onClick={() => setDraftSort(option.value)} />
+              <FilterChoice key={option.value} active={draftSort === option.value} label={t(option.label)} onClick={() => setDraftSort(option.value)} />
             ))}
             <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
           </FilterGroup>
-          <FilterGroup label="Listing type">
+          <FilterGroup label={t('Category')}>
+            {CATEGORY_OPTIONS.map(option => (
+              <FilterChoice key={option.value} active={draftCategory === option.value} label={t(option.label)} onClick={() => {
+                setDraftCategory(option.value);
+                if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
+              }} />
+            ))}
+          </FilterGroup>
+          <FilterGroup label={t('Listing type')}>
             {INTENT_OPTIONS.map(option => (
-              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
+              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={t(option.label)} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
           <FilterGroup label={`Brands (${releaseBrands.length})`}>
@@ -1593,18 +1651,24 @@ function MobileFilterSheet({
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => { setDraftBrand(value); setDraftModel(''); }} />
             ))}
           </FilterGroup>
-          <FilterGroup label={`Models (${models.length})`}>
+          <FilterGroup label={`Models (${draftModels.length})`}>
             <select
               id="mobile-model-filter"
-              value={draftModel}
-              disabled={!draftBrand || models.length === 0}
+              value={draftModels.find(option => option.model.toLowerCase() === draftModel.toLowerCase())?.model || draftModel}
+              disabled={!draftBrand || draftModels.length === 0}
               onChange={event => setDraftModel(event.target.value)}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-45"
               style={{ borderColor: BORDER, color: INK }}
             >
               <option value="">All models</option>
-              {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
+              {draftModels.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
+            {draftModelsError && (
+              <div role="alert" className="mt-2 text-xs" style={{ color: RED }}>
+                {t("Models couldn't load.")}{' '}
+                <button type="button" aria-label="Retry models" onClick={() => setDraftBrowseAttempt(value => value + 1)} className="font-semibold underline">{t('Retry')}</button>
+              </div>
+            )}
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
             {draftLocations.length > 0 && (
@@ -1650,7 +1714,6 @@ function MobileFilterSheet({
                 onChange={() => toggleLocation(value)}
               />
             ))}
-            <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Choose several countries to match any selected country. Country must be source-backed.</p>
           </FilterGroup>
           <FilterGroup label="Evidence">
             <FilterCheck checked={draftImagesOnly} label="Verified source image only" onChange={() => setDraftImagesOnly(value => !value)} />
@@ -1664,6 +1727,7 @@ function MobileFilterSheet({
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
           <button type="button" onClick={() => {
             setDraftBrand('');
+            setDraftModel('');
             setDraftCategory('all');
             setDraftIntent('');
             setDraftSort('newest');
@@ -1701,6 +1765,7 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 
 function ListingCard({ listing, selected, onSelect, benchmark }: { listing: ListingRecord; selected: boolean; onSelect: () => void; benchmark?: ListingBenchmarkData }) {
+  const { t } = useLanguage();
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
   const [imageAvailable, setImageAvailable] = useState(true);
@@ -1715,9 +1780,11 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
 
   return (
     <article
+      data-listing-id={listing.id}
       className="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
+      <span className="sr-only" data-listing-id={listing.id}>{listing.id}</span>
       {/* 1. Watch Image — only rendered when a real source URL exists */}
       {cardHasImage && (
         <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
@@ -1732,7 +1799,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       )}
       {!cardHasImage && (
         <button type="button" onClick={onSelect} className="flex h-[340px] w-full items-center justify-center rounded-md border border-[#E5DACB] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
-          NO IMAGE
+          {t('NO IMAGE')}
         </button>
       )}
 
@@ -1750,6 +1817,9 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         >
           {meta.title}
         </button>
+        {listing.model_requires_review === true && (
+          <div className="mt-1 text-[11px] font-medium text-[#7A8699]">Model requires review</div>
+        )}
       </div>
 
       {/* 4. Original source evidence, collapsed by default */}
@@ -1775,7 +1845,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         </div>
         <div className="text-xs font-medium text-[#7A8699]">
           {benchmark?.unavailable ? (
-            <span>Open for rating</span>
+            <span>{t('Open for rating')}</span>
           ) : priceRating ? (
             <span
               className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
@@ -1789,25 +1859,25 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
               {priceRating.label}
             </span>
           ) : (
-            <span>Open for rating</span>
+            <span>{t('Open for rating')}</span>
           )}
         </div>
       </div>
 
       {/* 6. Badges (Location & Date) */}
       <div className="mt-3.5 flex flex-wrap gap-2">
-        {meta.region && <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
           <Globe2 size={12} className="text-[#6B7280]" />
-          {meta.region}
-        </span>}
+          {meta.region || t('Location not provided')}
+        </span>
         <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
-          Posted {meta.postedDate || 'Posting date requires review'}
+          {t('Posted')} {meta.postedDate || t('Posting date requires review')}
         </span>
       </div>
 
       {/* 7. Posted by Section */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
-        <div className="text-[#6B7280]">Posted by</div>
+        <div className="text-[#6B7280]">{t('Posted by')}</div>
         {listing.dealer_profile_path && postingIdentity ? (
           <Link to={listing.dealer_profile_path} className="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]">
             {postingIdentity || 'Posting identity requires review'}
@@ -1829,16 +1899,14 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       {/* 8. Direct WhatsApp Contact Action */}
       <div className="mt-auto pt-4 flex flex-col gap-2">
         <div className="text-center text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-          {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
-            ? 'LATEST OBSERVED · CHECK AVAILABILITY'
-            : 'CONFIRMED CURRENT'}
+          {listingAvailabilityLabel(listing)}
         </div>
         <button
           type="button"
           onClick={onSelect}
           className="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2 text-[11px] font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
         >
-          CHECK AVAILABILITY
+          {t('Check availability')}
         </button>
       </div>
     </article>
@@ -1866,9 +1934,11 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   const visibleImageIndex = activeImage < availableImages.length ? activeImage : 0;
   const messageEvidence = listingMessageEvidence(listing);
   const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
-  const postingIdentity = strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name });
+  const postingIdentity = strongestPostingIdentity(listing);
 
-  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
+  const exactPair = listingPricePair(listing);
+  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS'
+    && (!Object.prototype.hasOwnProperty.call(exactPair, 'condition') || (exactPair.dial && exactPair.condition)));
   const [benchmark, setBenchmark] = useState<{
     loading: boolean;
     count: number;
@@ -1909,8 +1979,8 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
       })
       .catch(error => { if (error?.name !== 'AbortError') setContact(sourcePosterContact(listing)); });
     
-    // Fetch seller analytics
-    fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+    // Legacy workbook analytics do not accept V2 source listing identities.
+    if (listing.contract_version !== 'v2.0') fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
         if (!payload || payload.status !== 'ok') return;
@@ -1941,8 +2011,13 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
       const reference = listing.reference as string;
       const params = new URLSearchParams({ reference, brand: listing.brand });
       if (listing.dial_color) params.set('dial', listing.dial_color);
-
-      fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
+      const exactCanary = Object.prototype.hasOwnProperty.call(listingPricePair(listing), 'condition');
+      if (exactCanary) {
+        params.set('condition', listing.condition || '');
+        params.set('dial', listing.dial_color || '');
+        params.set('pageSize', '1');
+      }
+      fetch(`${exactCanary ? '/api/canary/price-research' : '/api/price-research'}?${params.toString()}`, { signal: controller.signal })
         .then(async response => response.ok ? response.json() : null)
         .then(payload => {
           if (!payload) {
@@ -2000,7 +2075,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
     <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
       {/* Top Banner Link */}
       <Link
-        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
+        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}&dial=${encodeURIComponent(listing.dial_color || '')}&condition=${encodeURIComponent(listing.condition || '')}`}
         className="w-full rounded border border-[#E8DECF] bg-[#F6EFE5] py-2 text-center text-xs font-semibold text-[#653E23] transition hover:bg-[#EFE5D8] block"
       >
         Open full price research
@@ -2056,12 +2131,14 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                 <X size={18} />
               </button>
             </div>
+            {listing.model_requires_review === true && (
+              <div className="mt-1 text-xs font-medium text-[#7A8699]">Model requires review</div>
+            )}
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+            {meta.foreignLabel && <div className="mt-1 text-xs font-medium text-[#7A8699]">{meta.foreignLabel}</div>}
             <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-              {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
-                ? 'LATEST OBSERVED · CHECK AVAILABILITY'
-                : 'CONFIRMED CURRENT'}
+              {listingAvailabilityLabel(listing)}
             </div>
 
             {messageEvidence && (
@@ -2102,7 +2179,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
             <div className="mt-4 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source poster</div>
               {listing.dealer_profile_path && postingIdentity ? (
                 <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
                   {postingIdentity || 'Posting identity requires review'}
@@ -2114,7 +2191,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               )}
               <div className="mt-0.5">
                 <ListingDealerEvidence
-                  sellerName={contact?.dealer_name || listing.seller_name}
+                  sellerName={listing.seller_name}
                   sellerPhone={listing.seller_phone}
                   contactPublicationApproved={listing.contact_publication_approved === true}
                   rating={listing.seller_rating ?? sellerReputation?.rating}
@@ -2129,14 +2206,16 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                   <ContactMetric label="Want to buy" value={sellerAnalytics?.wtb_posts || 0} />
                 </div>
               )}
-              {meta.region && <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
                 <Globe2 size={13} className="text-[#8A5826]" />
-                <span>{meta.region}</span>
-              </div>}
+                <span>{meta.region || 'Location not provided'}</span>
+              </div>
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
-              Direct poster contact is not published. Please help connect me with the poster through a verified channel without displaying a private number.
+              {contact?.contact_available
+                ? 'Contact the original poster to confirm this listing and its availability.'
+                : 'A verified, consented contact channel is not available for this listing.'}
             </p>
 
             {contact?.contact_channels?.whatsapp ? <a
@@ -2146,7 +2225,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
             >
               <MessageCircle size={18} />
-              Ask Curated Luxury on WhatsApp
+              Contact dealer on WhatsApp
             </a> : null}
             {contact?.contact_channels?.telegram ? <a
               href={contact.contact_channels.telegram}
@@ -2329,8 +2408,14 @@ function extractPriceFromRawText(text?: string | null): number | null {
 }
 
 function getListingMeta(listing: ListingRecord) {
-  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region);
+  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region)
+    || (listing.contract_version === 'v2.0' ? cleanValue(listing.location_region || listing.region) || null : null);
   const postedDate = formatListingDate(listing.listing_date);
+  const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency)).toUpperCase();
+  const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
+  const rawAmount = typeof listing.source_price_amount === 'number' && listing.source_price_amount > 0
+    ? listing.source_price_amount
+    : (typeof listing.price_raw === 'number' && listing.price_raw > 0 ? listing.price_raw : null);
 
   const verifiedUsd = verifiedUsdPrice(listing);
   const sourcePrice = formatSourcePrice(listing);
@@ -2344,7 +2429,9 @@ function getListingMeta(listing: ListingRecord) {
       ? sourcePrice
       : (isWtb ? 'Open to offers' : 'Inquire for price');
 
-  const foreignLabel = null;
+  const foreignLabel = isForeignCurrency && rawAmount !== null
+    ? `Original source price: ${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(rawAmount)}`
+    : null;
 
   const priceEvidenceLabel = verifiedUsd !== null
     ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD price')
@@ -2385,7 +2472,7 @@ function buildListingTitle(listing: ListingRecord) {
   const parts = [
     brand,
     model,
-    ref,
+    ref || cleanValue(listing.reference),
     cleanValue(listing.condition),
     listing.year ? String(listing.year) : '',
     displayDial(listing.dial_color),
@@ -2419,6 +2506,8 @@ function TradingFloorQuickScroll() {
   const [progress, setProgress] = useState(0);
   const [scrollable, setScrollable] = useState(false);
   useEffect(() => {
+    const previousScrollBehavior = document.documentElement.style.scrollBehavior;
+    document.documentElement.style.scrollBehavior = 'smooth';
     const update = () => {
       const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
       const maximum = Math.max(0, documentHeight - window.innerHeight);
@@ -2431,6 +2520,7 @@ function TradingFloorQuickScroll() {
     window.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
     return () => {
+      document.documentElement.style.scrollBehavior = previousScrollBehavior;
       observer?.disconnect();
       window.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
@@ -2441,7 +2531,7 @@ function TradingFloorQuickScroll() {
   return (
     <nav
       aria-label="Quick Trading Floor scroll"
-      className="fixed right-20 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg max-lg:right-2 sm:max-lg:right-4 sm:p-1.5 lg:p-2"
+      className="fixed right-3 top-1/2 z-[60] flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg sm:right-4 sm:p-1.5 lg:right-24 lg:p-2"
       style={{ borderColor: BORDER }}
     >
       <button type="button" title="Top" aria-label="Scroll to top of Trading Floor" onClick={() => scrollTo(0)} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronUp size={18} /></button>
@@ -2453,12 +2543,15 @@ function TradingFloorQuickScroll() {
   );
 }
 
-function displayUsdPrice(listing: ListingRecord) {
+function ratingUsdPrice(listing: ListingRecord) {
   return verifiedUsdPrice(listing);
 }
 
-function ratingUsdPrice(listing: ListingRecord) {
-  return verifiedUsdPrice(listing);
+function listingPricePair(listing: ListingRecord): PriceResearchBatchPair {
+  const canary = import.meta.env.VITE_USE_CANARY_V2 === 'true'
+    || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+  return { brand: listing.brand, reference: listing.reference || '', dial: cleanValue(listing.dial_color) || null,
+    ...(canary ? { condition: cleanValue(listing.condition) || null } : {}) };
 }
 
 function reviewedWorkbookUsdPrice(listing: ListingRecord) {
@@ -2552,8 +2645,8 @@ function listingMessageEvidence(listing: ListingRecord) {
   if (listing.raw_message_scope === 'normalized_summary') {
     return { label: 'SOURCE TEXT', text: 'Unverified workbook summary text is withheld from the customer view.' };
   }
-  const rawMessage = cleanValue(listing.raw_message);
-  if (rawMessage && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
+  const rawMessage = typeof listing.raw_message === 'string' ? listing.raw_message : '';
+  if (rawMessage.trim() && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
   const rawLine = cleanValue(listing.raw_line);
   if (rawLine) return { label: 'SOURCE LISTING LINE', text: rawLine };
   const description = cleanValue(listing.description);

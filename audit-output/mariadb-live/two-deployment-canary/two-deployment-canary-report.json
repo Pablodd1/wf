@@ -1,0 +1,84 @@
+{
+  "runKey": "two-deploy-canary-1788028000000",
+  "source_table": "auctions_canary",
+  "manifest": {
+    "contract": "wf-mariadb-private-raw-staging-v1",
+    "source_system": "OceanDigital MariaDB",
+    "source_database": "thecollective_inventory",
+    "source_table": "auctions_canary",
+    "isolation_level": "REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)",
+    "total_source_rows": 10,
+    "lower_boundary": {
+      "id": "canary-two-deploy-1788028000000-001",
+      "created_on": "2026-08-29T18:26:41.000Z",
+      "updated_on": null
+    },
+    "upper_boundary": {
+      "id": "canary-two-deploy-1788028000000-010",
+      "created_on": "2026-08-29T18:26:50.000Z",
+      "updated_on": null
+    },
+    "snapshot_timestamp": "2026-08-29T18:26:40.000Z",
+    "manifest_sha256": "4b21f5c0cf3f3f0e3bb7fe428f9ae0722dd26891cfb3b74f12abefc81bfb54e4"
+  },
+  "finalCheckpoint": {
+    "status": "COPYING_RAW",
+    "run_key": "two-deploy-canary-1788028000000",
+    "contract": "wf-mariadb-private-raw-staging-v1",
+    "input_rows": 10,
+    "started_at": "2026-08-29T18:29:30.903685+00:00",
+    "updated_at": "2026-08-29T18:29:36.128309+00:00",
+    "completed_at": null,
+    "last_source_id": "canary-two-deploy-1788028000000-010",
+    "frozen_manifest": {
+      "contract": "wf-mariadb-private-raw-staging-v1",
+      "source_table": "auctions_canary",
+      "source_system": "OceanDigital MariaDB",
+      "lower_boundary": {
+        "id": "canary-two-deploy-1788028000000-001",
+        "created_on": "2026-08-29T18:26:41.000Z",
+        "updated_on": null
+      },
+      "upper_boundary": {
+        "id": "canary-two-deploy-1788028000000-010",
+        "created_on": "2026-08-29T18:26:50.000Z",
+        "updated_on": null
+      },
+      "isolation_level": "REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)",
+      "manifest_sha256": "4b21f5c0cf3f3f0e3bb7fe428f9ae0722dd26891cfb3b74f12abefc81bfb54e4",
+      "source_database": "thecollective_inventory",
+      "total_source_rows": 10,
+      "snapshot_timestamp": "2026-08-29T18:26:40.000Z"
+    },
+    "last_created_on": "2026-08-29T18:26:50.000Z",
+    "manifest_sha256": "4b21f5c0cf3f3f0e3bb7fe428f9ae0722dd26891cfb3b74f12abefc81bfb54e4",
+    "newly_staged_rows": 10,
+    "capture_error_rows": 0,
+    "frozen_upper_boundary": {
+      "id": "canary-two-deploy-1788028000000-010",
+      "created_on": "2026-08-29T18:26:50.000Z",
+      "updated_on": null
+    },
+    "already_staged_identical_rows": 0
+  },
+  "readbackResult": {
+    "mode": "FULL_EXHAUSTIVE",
+    "total_verified": 10,
+    "mismatches": 0
+  },
+  "errorLedgerResult": {
+    "verified": true,
+    "error_count": 0,
+    "reconciled": true
+  },
+  "finalizeData": {
+    "status": "FINALIZED",
+    "run_key": "two-deploy-canary-1788028000000",
+    "input_rows": 10,
+    "completed_at": "2026-08-29T18:29:36.830184+00:00",
+    "checkpoint_status": "RAW_STAGED",
+    "total_staged_rows": 10,
+    "capture_error_rows": 0
+  },
+  "publicDelta": 0
+}

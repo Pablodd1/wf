@@ -131,8 +131,23 @@ module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const brand = (req.query.brand || '').trim();
-  if (!brand) return res.status(400).json({ error: 'brand required' });
+  const brand = typeof req.query?.brand === 'string' ? req.query.brand.trim() : '';
+  if (!brand || brand.length>100) return res.status(400).json({ error: 'brand required' });
+
+  if (process.env.VITE_USE_CANARY_V2 === 'true') {
+    if(req.method!=='GET')return res.status(405).json({error:'Method not allowed'});
+    // Model filters are catalog metadata, not evidence of published inventory.
+    // Missing catalog coverage is a valid empty filter, not a legacy-release 404.
+    const references=listCanonicalCatalogReferences(brand),models=new Map();
+    for(const entry of references){
+      const model=entry.model&&normalizeCanonicalModel(entry.model,brand);
+      if(!model)continue;
+      if(!models.has(model))models.set(model,new Set());
+      models.get(model).add(entry.reference);
+    }
+    const rows=[...models].map(([model,refs])=>({model,reference_count:refs.size})).sort((a,b)=>b.reference_count-a.reference_count||a.model.localeCompare(b.model));
+    return res.status(200).json({success:true,brand,model_count:rows.length,catalog_reference_count:references.length,models:rows,identity_source:'CANONICAL_CATALOG_METADATA',sample_capped:false});
+  }
 
   const cached = _cache.get(brand);
   if (cached && Date.now() - cached.at < CACHE_TTL) {

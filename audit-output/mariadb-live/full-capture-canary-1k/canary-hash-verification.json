@@ -1,0 +1,9 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "canary_run_key": "full-capture-canary-1k-1788027138860",
+  "total_verified": 1000,
+  "mismatches": 0,
+  "canonical_version": "v1-json-keys-sorted-compact",
+  "hash_algorithm": "sha256",
+  "pinned_cert_fingerprint": "07:F7:B9:58:1B:79:C7:42:61:8D:3F:85:91:DC:54:9B:F1:6E:FB:C6:2E:45:0E:FD:9B:56:F7:54:D3:52:E1:97"
+}

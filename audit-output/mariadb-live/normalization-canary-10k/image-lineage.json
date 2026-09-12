@@ -1,0 +1,67 @@
+{
+  "total_rows": 10000,
+  "rows_with_image": 10000,
+  "rows_without_image": 0,
+  "sample_images": [
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    },
+    {
+      "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "image_key": "677ec3e161c64_front_image.jpg",
+      "brand": "Richard Mille",
+      "model": "RM35-02"
+    }
+  ]
+}

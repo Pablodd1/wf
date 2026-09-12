@@ -1,0 +1,74 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "timestamp": "2026-08-29T21:55:23.581Z",
+  "total_registered_synthetic_rows": 5,
+  "registered_rows": [
+    {
+      "source_id": "canary-resume-1788027866636-001",
+      "source_table": "auctions",
+      "source_system": "OceanDigital MariaDB",
+      "source_database": "thecollective_inventory",
+      "classification": "SYNTHETIC_TEST_EVIDENCE",
+      "staged_run_key": "live-resume-canary-10row-1788027866636",
+      "batch_token": "bfd61e492cb9a883835a9a8d69e7d2003f34d7a4eb4503885d7bf8da72c477b5",
+      "source_hash": "b50b082fcd7cb649fe7fcadd060c02ff80de11e5a8948fbffe770641dda73c0f",
+      "staged_at": "2026-08-29 18:24:27.473490+00:00",
+      "exclusion_rule": "EXCLUDE_FROM_PRODUCTION_RECONCILIATION_NORMALIZATION_AND_PUBLICATION"
+    },
+    {
+      "source_id": "canary-resume-1788027866636-002",
+      "source_table": "auctions",
+      "source_system": "OceanDigital MariaDB",
+      "source_database": "thecollective_inventory",
+      "classification": "SYNTHETIC_TEST_EVIDENCE",
+      "staged_run_key": "live-resume-canary-10row-1788027866636",
+      "batch_token": "bfd61e492cb9a883835a9a8d69e7d2003f34d7a4eb4503885d7bf8da72c477b5",
+      "source_hash": "7af16537a37be3702d845a512934038b51f9328537201af3d9b8c995dad45948",
+      "staged_at": "2026-08-29 18:24:27.473490+00:00",
+      "exclusion_rule": "EXCLUDE_FROM_PRODUCTION_RECONCILIATION_NORMALIZATION_AND_PUBLICATION"
+    },
+    {
+      "source_id": "canary-resume-1788027866636-003",
+      "source_table": "auctions",
+      "source_system": "OceanDigital MariaDB",
+      "source_database": "thecollective_inventory",
+      "classification": "SYNTHETIC_TEST_EVIDENCE",
+      "staged_run_key": "live-resume-canary-10row-1788027866636",
+      "batch_token": "bfd61e492cb9a883835a9a8d69e7d2003f34d7a4eb4503885d7bf8da72c477b5",
+      "source_hash": "53e7a374e198e51fdb3e3a27a5d4b2f6610839a9859318a070eb16ff801f3545",
+      "staged_at": "2026-08-29 18:24:27.473490+00:00",
+      "exclusion_rule": "EXCLUDE_FROM_PRODUCTION_RECONCILIATION_NORMALIZATION_AND_PUBLICATION"
+    },
+    {
+      "source_id": "canary-resume-1788027866636-004",
+      "source_table": "auctions",
+      "source_system": "OceanDigital MariaDB",
+      "source_database": "thecollective_inventory",
+      "classification": "SYNTHETIC_TEST_EVIDENCE",
+      "staged_run_key": "live-resume-canary-10row-1788027866636",
+      "batch_token": "bfd61e492cb9a883835a9a8d69e7d2003f34d7a4eb4503885d7bf8da72c477b5",
+      "source_hash": "5d87bfcad603d89533a1c9b673933f5c9c3256ff314605e8458230edb5a3c8b3",
+      "staged_at": "2026-08-29 18:24:27.473490+00:00",
+      "exclusion_rule": "EXCLUDE_FROM_PRODUCTION_RECONCILIATION_NORMALIZATION_AND_PUBLICATION"
+    },
+    {
+      "source_id": "canary-resume-1788027866636-005",
+      "source_table": "auctions",
+      "source_system": "OceanDigital MariaDB",
+      "source_database": "thecollective_inventory",
+      "classification": "SYNTHETIC_TEST_EVIDENCE",
+      "staged_run_key": "live-resume-canary-10row-1788027866636",
+      "batch_token": "bfd61e492cb9a883835a9a8d69e7d2003f34d7a4eb4503885d7bf8da72c477b5",
+      "source_hash": "34f35c1dc84f0a5d7e3933080199df9ca7267a6419e03f98f1f7251ef84f9836",
+      "staged_at": "2026-08-29 18:24:27.473490+00:00",
+      "exclusion_rule": "EXCLUDE_FROM_PRODUCTION_RECONCILIATION_NORMALIZATION_AND_PUBLICATION"
+    }
+  ],
+  "deterministic_policy": {
+    "action": "PRESERVE_RAW_ROWS_EXCLUDE_FROM_PRODUCTION_PIPELINES",
+    "is_immutable_raw_staging_preserved": true,
+    "normalization_excluded": true,
+    "publication_excluded": true,
+    "production_reconciliation_excluded": true
+  }
+}

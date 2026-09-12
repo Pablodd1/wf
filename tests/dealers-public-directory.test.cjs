@@ -5,7 +5,23 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { loadCanonicalDealerRows, publicDealer, unifiedDealerPage } = require('../api/dealers.js');
+const approved = [
+  {id:'synthetic-alpha',display_name:'Synthetic Alpha',rating:4.5,review_count:2},
+  {id:'synthetic-beta',display_name:'Synthetic Beta',rating:null,review_count:2},
+  {id:'synthetic-gamma',display_name:'Synthetic Gamma',rating:null,review_count:0},
+];
+const defaultRpc = async (name,args) => {
+  if(name==='get_approved_dealer_profile_v2') return {data:null,error:null};
+  assert.equal(name,'get_approved_dealer_directory');
+  const searched=approved.filter(row=>!args.p_search || row.display_name.toLowerCase().includes(args.p_search.toLowerCase()));
+  const rated=searched.filter(row=>row.review_count>0),rows=args.p_rated?rated:searched;
+  return {data:{dealers:rows.slice(args.p_offset,args.p_offset+args.p_limit),total:rows.length,all_total:searched.length,rated_total:rated.length},error:null};
+};
+let rpc=defaultRpc;
+const dependency=require.resolve('../api/_lib/supabase');
+require.cache[dependency]={id:dependency,filename:dependency,loaded:true,exports:{getClient:()=>({rpc:(...args)=>rpc(...args)})}};
+process.env.VITE_USE_CANARY_V2='true';
+const { publicDealer } = require('../api/dealers.js');
 const {
   mariadbProfilePayload,
   mariadbProfiles,
@@ -36,7 +52,7 @@ test('public directory keeps Reference Check database-backed and does not requir
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealers.js'), 'utf8');
   assert.doesNotMatch(source, /authorizeDealer/);
   assert.match(source, /getClient/);
-  assert.match(source, /\.eq\('status', 'VERIFIED'\)/);
+  assert.match(source, /get_approved_dealer_directory/);
 });
 
 test('Top Rated preserves source rank and feedback without inventing a numeric rating', () => {
@@ -87,66 +103,50 @@ test('source phones remain private reconciliation evidence and are not publicly 
   assert.doesNotMatch(source, /digits\(profile\.verified_phone\)/);
 });
 
-test('Top Rated and source profile API handlers return the complete source-backed workflow', async () => {
-  const directory = await invoke(dealersHandler, { mode: 'top-rated', pageSize: '25' });
+test('directory serves approved database evidence and static source IDs cannot open public profiles', async () => {
+  const directory = await invoke(dealersHandler, { mode: 'rated', pageSize: '25' });
   assert.equal(directory.statusCode, 200);
-  assert.equal(directory.payload.total, 25);
-  assert.equal(directory.payload.source, 'unified-static-reconciliation-fallback');
+  assert.equal(directory.payload.total, 2);
+  assert.equal(directory.payload.source, 'approved-canonical-database');
 
   const profile = await invoke(dealerProfileHandler, { id: 'watchfacts-source-3435' });
-  assert.equal(profile.statusCode, 200);
-  assert.equal(profile.payload.dealer.display_name, 'Jaztime Watches');
-  assert.ok(profile.payload.listings.length > 0);
-  assert.ok(profile.payload.reviews.length > 0);
-  assert.ok(profile.payload.listings.every(row => row.price_usd === null));
-  assert.ok(profile.payload.listings.every(row => row.raw_message === null || typeof row.raw_message === 'string'));
+  assert.equal(profile.statusCode, 404);
+  assert.equal(profile.payload.dealer, undefined);
 });
 
-test('All, Rated, and Top Rated are filtered views of one reconciled population', () => {
-  const canonical = ratedProfiles();
-  const candidates = mariadbProfiles();
-  assert.equal(candidates.length, 270);
-  const all = unifiedDealerPage({
-    canonicalDealers: canonical, sourceCandidates: candidates,
-    mode: 'all', search: '', page: 1, pageSize: 1000,
-  });
-  const rated = unifiedDealerPage({
-    canonicalDealers: canonical, sourceCandidates: candidates,
-    mode: 'rated', search: '', page: 1, pageSize: 1000,
-  });
-  const top = unifiedDealerPage({
-    canonicalDealers: canonical, sourceCandidates: candidates,
-    mode: 'top-rated', search: '', page: 1, pageSize: 25,
-  });
-  assert.equal(all.total, 323);
-  assert.equal(rated.total, 56);
-  assert.equal(top.total, 25);
-  assert.deepEqual(
-    top.dealers.map(dealer => dealer.id),
-    rated.dealers.slice(0, 25).map(dealer => dealer.id),
-  );
-  assert.ok(rated.dealers.every(dealer => Number(dealer.review_count || 0) > 0));
+test('Rated is a source-backed subset of the same approved All population', async () => {
+  const all=(await invoke(dealersHandler,{mode:'all',pageSize:'100'})).payload;
+  const rated=(await invoke(dealersHandler,{mode:'rated',pageSize:'100'})).payload;
+  assert.equal(all.total,3);assert.equal(rated.total,2);
+  assert.deepEqual(rated.dealers.map(row=>row.id),all.dealers.filter(row=>row.review_count>0).map(row=>row.id));
+  assert.deepEqual(rated.reconciliation,{all_dealers_total:3,rated_dealers_total:2,rated_is_filtered_from_all:true});
+  assert.equal(rated.dealers[1].rating,null,'Feedback count must not fabricate a score');
 });
 
-test('canonical directory pagination reads every database profile before unified pagination', async () => {
+test('canonical directory pagination requests only the bounded page and exhausts the approved population', async () => {
   const source = Array.from({ length: 205 }, (_, index) => ({ id: `dealer-${index}` }));
   const offsets = [];
-  const client = {
-    async rpc(_name, args) {
+  rpc = async (_name, args) => {
       offsets.push(args.p_offset);
       return {
         data: {
           total: source.length,
+          all_total: source.length,
+          rated_total: 0,
           dealers: source.slice(args.p_offset, args.p_offset + args.p_limit),
         },
         error: null,
       };
-    },
   };
-  const result = await loadCanonicalDealerRows(client, null);
-  assert.equal(result.error, null);
-  assert.equal(result.data.dealers.length, 205);
-  assert.deepEqual(offsets, [0, 100, 200]);
+  try {
+    const ids=[];
+    for(let page=1;page<=3;page++) {
+      const result=await invoke(dealersHandler,{page:String(page),pageSize:'100'});
+      assert.equal(result.statusCode,200);assert.equal(result.payload.total,205);
+      ids.push(...result.payload.dealers.map(row=>row.id));
+    }
+    assert.deepEqual(ids,source.map(row=>row.id));assert.deepEqual(offsets,[0,100,200]);
+  } finally {rpc=defaultRpc;}
 });
 
 test('MariaDB dealer candidates publish sanitized business evidence and internal profiles', () => {
@@ -186,16 +186,17 @@ test('source dates remove repost annotations and remain sortable', () => {
   assert.equal(payload.stats.latest_post, '2026-08-09T00:00:00.000Z');
 });
 
-test('verified phone is published only when the dealer consent flag is true', () => {
+test('bulk directory omits contact details even when contact consent is true', () => {
   const base = {
     id: 'dealer-1', display_name: 'Verified Dealer', contact_consent: false,
   };
-  const privateResult = publicDealer(base, { wts_posts: 2 }, '+1 305 555 0101', 1);
-  assert.equal(privateResult.verified_phone, null);
+  const privateResult = publicDealer({...base,verified_phone:'+1 305 555 0101'});
+  assert.equal(privateResult.verified_phone, undefined);
   assert.equal('contact_consent' in privateResult, false);
 
-  const publicResult = publicDealer({ ...base, contact_consent: true }, null, '+1 305 555 0101', 1);
-  assert.equal(publicResult.verified_phone, '+1 305 555 0101');
+  const publicResult = publicDealer({ ...base, contact_consent: true,verified_phone:'+1 305 555 0101',source_url:'https://watchfacts.com/private' });
+  assert.equal(publicResult.verified_phone, undefined);
+  assert.equal(publicResult.source_url,undefined);
 });
 
 test('source profile workflow is provenance-labeled and remains distinct from verified identity', () => {
@@ -210,7 +211,7 @@ test('source profile workflow is provenance-labeled and remains distinct from ve
 
   const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
   const profile = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerProfile.tsx'), 'utf8');
-  assert.match(directory, /public-source leaderboard/);
+  assert.doesNotMatch(directory, /public-source leaderboard/);
   assert.match(profile, /Top Rated dealer evidence/);
   assert.match(profile, /Captured facts remain distinct from internally verified seller lineage/);
   assert.match(directory, /Full profile/);
@@ -224,7 +225,7 @@ test('public dealer API payloads never expose private provenance URLs', async ()
   for (const query of [
     { mode: 'top-rated', pageSize: '25' },
     { mode: 'rated', pageSize: '100' },
-    { mode: 'legacy', pageSize: '100' },
+    { mode: 'all', pageSize: '100' },
   ]) {
     const response = await invoke(dealersHandler, query);
     assert.equal(response.statusCode, 200);
@@ -233,7 +234,7 @@ test('public dealer API payloads never expose private provenance URLs', async ()
   }
   for (const id of ['watchfacts-source-3435', 'watchfacts-legacy-9641']) {
     const response = await invoke(dealerProfileHandler, { id });
-    assert.equal(response.statusCode, 200);
+    assert.equal(response.statusCode, 404);
     assert.doesNotMatch(JSON.stringify(response.payload), /https:\/\/watchfacts\.com\//i);
   }
 });
@@ -244,7 +245,7 @@ test('Reference Check opens on All Dealers while rated evidence views remain ava
   assert.match(directory, /Reference Check/);
   assert.match(directory, /> All Dealers<\/button>/);
   assert.match(directory, /> Rated Dealers</);
-  assert.match(directory, /Top Rated Dealers/);
+  assert.doesNotMatch(directory, /Top Rated Dealers/);
   assert.doesNotMatch(directory, /> Legacy Profiles<\/button>/);
 });
 

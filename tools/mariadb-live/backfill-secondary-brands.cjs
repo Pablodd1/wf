@@ -24,7 +24,7 @@ async function run() {
   const conn = await mysql.createConnection({
     host: '161.35.0.209',
     user: 'john',
-    password: 'U0aeAr1zFt2\\',
+    password: process.env.MYSQL_PASS,
     database: 'thecollective_inventory'
   });
 

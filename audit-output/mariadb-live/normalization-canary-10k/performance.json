@@ -1,0 +1,8 @@
+{
+  "total_rows": 10000,
+  "fetch_duration_ms": 6375,
+  "normalization_duration_ms": 43,
+  "total_duration_ms": 6418,
+  "rows_per_second": 232558.14,
+  "memory_usage_mb": 33.72
+}

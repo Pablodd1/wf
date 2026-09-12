@@ -1,0 +1,7 @@
+{
+  "canary-manifest.json": "1d44c30121807d0529114b4356c30feb2a4ab14f2b9cb3285d2b5a1058eba527",
+  "canary-reconciliation.json": "c7a7133ec736e4a16f9a77e81e7afc3909479500463eb1caabc26452d6706e54",
+  "canary-hash-verification.json": "7e5687860e7c7d4651b1c491ba6608bc68ceb04602c666f1de9e6d973a4cb83a",
+  "canary-error-ledger.json": "eba6943e852ff710ea523856633f6aa2cbf9da852ffb0163e9d9e0c601c81bbf",
+  "canary-public-impact.json": "8c951e7f8fe04978cfdae037bf66d66fef790615a7c56d555b92d6f8d6737392"
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, Store, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
@@ -10,6 +10,8 @@ import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShort
 import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
 import { loadPriceResearchBatchSummaries } from '../utils/priceResearchBatchSummary';
 import { isHeldRolexPatekBrand } from '../utils/rolexPatekPublication';
+import { canaryBrowseEnabled, loadPublishedBrowse, publishedBrowseBrand } from '../utils/publishedBrowse';
+import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
 
 function referenceEvidenceKey(brand: string, reference: string) {
   return `${brand.trim().toLowerCase()}|${reference.trim().toUpperCase()}`;
@@ -23,7 +25,9 @@ function exactSourceImageUrl(record: ReviewedMarketRecord) {
 }
 
 // ── Types ──────────────────────────────────────────────────────
-interface RowData {
+type PriceResearchListingContract = Omit<Partial<ListingDisplayContract>, 'image_urls' | 'price_research_eligible'>;
+
+interface RowData extends PriceResearchListingContract {
   id: string;
   brand?: string | null;
   reference?: string | null;
@@ -35,6 +39,7 @@ interface RowData {
   source: string;
   year: number | null;
   is_outlier: boolean;
+  analytics_included?: boolean;
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
     'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
     'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
@@ -54,6 +59,7 @@ interface RowData {
   display_image_url?: string | null;
   thumbnail_url?: string | null;
   image_urls?: string[] | null;
+  price_research_eligible?: boolean;
   has_images?: boolean;
   image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
@@ -62,7 +68,7 @@ interface RowData {
   confidence?: number | null;
   listing_status?: string | null;
   listing_type?: string | null;
-  intent?: string | null;
+  intent?: 'WTS' | 'WTB' | null;
   contact_publication_approved?: boolean;
   dealer_id?: string | null;
   dealer_profile_path?: string | null;
@@ -72,7 +78,7 @@ interface RowData {
   seller_group_count?: number | null;
 }
 
-interface WtbListingData {
+interface WtbListingData extends PriceResearchListingContract {
   id: string;
   brand: string;
   model?: string | null;
@@ -339,12 +345,16 @@ interface LiquidityData {
   demand_cohorts?: { dial_color: string; count: number }[];
   demand_rows?: WtbListingData[];
   demand_evidence?: {
-    returned: number;
+    returned?: number;
     total: number;
-    page: number;
+    page?: number;
     page_size: number;
-    pages: number;
-    sample_capped: boolean;
+    pages?: number;
+    sample_capped?: boolean;
+    snapshot?: string;
+    cursor?: string | null;
+    next_cursor?: string | null;
+    has_more?: boolean;
   };
   demand_sample_capped?: boolean;
 }
@@ -358,6 +368,9 @@ interface PriceData {
   collection: string | null;
   dialColors: string[] | null;
   dial_analysis: DialPoint[];
+  dial_options?: Array<{ dial_color: string | null; count: number }>;
+  wts_count?: number;
+  wtb_count?: number;
   dial_trends?: DialTrendData[];
   dial_data_quality?: {
     known_count: number;
@@ -380,12 +393,16 @@ interface PriceData {
   demand_scope?: 'EXACT_REFERENCE_ALL_DIALS';
   demand_rows?: WtbListingData[];
   demand_evidence?: {
-    returned: number;
+    returned?: number;
     total: number;
-    page: number;
+    page?: number;
     page_size: number;
-    pages: number;
-    sample_capped: boolean;
+    pages?: number;
+    sample_capped?: boolean;
+    snapshot?: string;
+    cursor?: string | null;
+    next_cursor?: string | null;
+    has_more?: boolean;
   };
   excluded_count?: number;
   excluded_breakdown?: {
@@ -429,6 +446,7 @@ interface PriceData {
     q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
     iqr_multiplier?: number;
   } | null;
+  stats_explanation?: string | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
   forecast?: ForecastData;
@@ -451,6 +469,9 @@ interface PriceData {
     sale_page?: number;
     sale_pages?: number;
     truncated: boolean;
+    next_cursor?: string | null;
+    cursor?: string | null;
+    has_more?: boolean;
   };
   methodology: {
     method: 'IQR_3_0' | 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0'; minimum_sample: number; included_count: number; excluded_count: number;
@@ -490,10 +511,11 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const WTB_LISTING_PAGE_SIZE = 24;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega', 'Tudor']
-  .filter(brand => !isHeldRolexPatekBrand(brand));
+  .filter(brand => canaryBrowseEnabled || !isHeldRolexPatekBrand(brand));
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#111827',
@@ -676,7 +698,9 @@ function ListingComparisonTooltip({ active, label, payload }: {
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
   const initialReference = searchParams.get('ref') || searchParams.get('reference') || '';
-  const initialBrand = searchParams.get('brand') || '';
+  const initialBrand = canaryBrowseEnabled ? publishedBrowseBrand(searchParams.get('brand') || '') : searchParams.get('brand') || '';
+  const initialDial = searchParams.get('dial') || searchParams.get('dial_color') || '';
+  const initialCondition = searchParams.get('condition') || '';
   const [query, setQuery] = useState(initialReference);
   const [queryBrand, setQueryBrand] = useState(initialBrand);
   const [data, setData] = useState<PriceData | null>(null);
@@ -689,6 +713,40 @@ export default function PriceResearch() {
   const [detailError, setDetailError] = useState('');
   const [saleEvidencePage, setSaleEvidencePage] = useState(1);
   const [demandEvidencePage, setDemandEvidencePage] = useState(1);
+  // Phase 5.2 canary demand lane: cursor chain instead of numeric offsets.
+  const [demandCursorHistory, setDemandCursorHistory] = useState<(string | null)[]>([null]);
+  const [selectedCondition, setSelectedCondition] = useState<string>(initialCondition);
+  const availableConditions: string[] = useMemo(() => {
+    const condSet = new Set<string>();
+    const conditionCounts = (data as unknown as { condition_counts?: Record<string, number> })?.condition_counts;
+    if (conditionCounts) {
+      Object.keys(conditionCounts).forEach(c => {
+        if (c && c.trim() && c.toLowerCase() !== 'all conditions') condSet.add(c.trim());
+      });
+    }
+    const evidenceObj = data?.evidence as { rows?: Array<{ condition?: string | null }> } | undefined;
+    if (Array.isArray(evidenceObj?.rows)) {
+      evidenceObj.rows.forEach(r => {
+        if (r?.condition && typeof r.condition === 'string' && r.condition.trim()) {
+          condSet.add(r.condition.trim());
+        }
+      });
+    }
+    const rawData = data as unknown as { rows?: Array<{ condition?: string | null }> } | null;
+    if (Array.isArray(rawData?.rows)) {
+      rawData.rows.forEach(r => {
+        if (r?.condition && typeof r.condition === 'string' && r.condition.trim()) {
+          condSet.add(r.condition.trim());
+        }
+      });
+    }
+    if (selectedCondition && selectedCondition.trim()) {
+      condSet.add(selectedCondition.trim());
+    }
+    return ['All Conditions', ...Array.from(condSet).sort()];
+  }, [data, selectedCondition]);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [cursorIndex, setCursorIndex] = useState(0);
   const listingRequestRef = useRef<{ sequence: number; controller: AbortController | null }>({
     sequence: 0,
     controller: null,
@@ -714,7 +772,10 @@ const DEFAULT_RESEARCH_BRANDS: { brand: string }[] = [
 ].filter(brand => !isHeldRolexPatekBrand(brand)).map(brand => ({ brand }));
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>(DEFAULT_RESEARCH_BRANDS);
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>(canaryBrowseEnabled ? [] : DEFAULT_RESEARCH_BRANDS);
+  const browseSnapshotRef = useRef<string | undefined>(undefined);
+  const pickerRequestRef = useRef<AbortController | null>(null);
+  const researchRequestRef = useRef<AbortController | null>(null);
   const [pBrand, setPBrand] = useState(initialBrand);
   const [pModels, setPModels] = useState<{ model: string; reference_count: number; listing_count?: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
@@ -744,15 +805,30 @@ const DEFAULT_RESEARCH_BRANDS: { brand: string }[] = [
   const [mStats, setMStats] = useState<ModelStats | null>(null);
 
   const loadModels = useCallback(async (brand: string) => {
+    researchRequestRef.current?.abort();
+    setLoading(false); setData(null); setError('');
+    pickerRequestRef.current?.abort();
+    const controller = new AbortController();
+    pickerRequestRef.current = controller;
 setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setModelQuery(''); setReferenceQuery(''); setPickerError(''); setMStats(null);
-    if (!brand) return;
+    if (!brand) { setPLoading(''); return; }
     setPLoading('models');
     try {
+      if (canaryBrowseEnabled) {
+        const payload = await loadPublishedBrowse('price_research', brand, '', controller.signal, browseSnapshotRef.current);
+        if (controller.signal.aborted) return;
+        browseSnapshotRef.current = payload.snapshot_id;
+        setPBrands(payload.brands);
+        setPModels(payload.models);
+        setModelImages(Object.fromEntries(payload.models.filter(item => item.image_url).map(item => [item.model, item.image_url!])));
+        return;
+      }
       const [r, imageResponse] = await Promise.all([
-        fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`),
-        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&images=true&pageSize=100`).catch(() => null),
+        fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`, { signal: controller.signal }),
+        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&images=true&pageSize=100`, { signal: controller.signal }).catch(() => null),
       ]);
       const d = await r.json();
+      if (controller.signal.aborted) return;
       if (!r.ok || !d.success) {
         setPickerError(d.error || 'Models are temporarily unavailable');
         return;
@@ -760,6 +836,7 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
       setPModels(d.models || []);
       if (imageResponse?.ok) {
         const imagePayload = await imageResponse.json().catch(() => null) as ReviewedMarketResponse | null;
+        if (controller.signal.aborted) return;
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const model = String(record.model || '').trim();
@@ -768,25 +845,44 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
         }
         setModelImages(nextImages);
       }
-    } catch { /* ignore — direct search still works */ }
-    finally { setPLoading(''); }
+    } catch (requestError) {
+      if (!controller.signal.aborted) setPickerError(requestError instanceof Error ? requestError.message : 'Models are temporarily unavailable');
+    }
+    finally { if (!controller.signal.aborted) setPLoading(''); }
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
+    pickerRequestRef.current?.abort();
+    const controller = new AbortController();
+    pickerRequestRef.current = controller;
 setPModel(model); setPRefs([]); setReferenceQuery(''); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setPickerError(''); setMStats(null);
-    if (!brand || !model) return;
+    if (!brand || !model) { setPLoading(''); return; }
     setPLoading('refs');
     try {
+      if (canaryBrowseEnabled) {
+        const payload = await loadPublishedBrowse('price_research', brand, model, controller.signal, browseSnapshotRef.current);
+        if (controller.signal.aborted) return;
+        browseSnapshotRef.current = payload.snapshot_id;
+        setPRefs(payload.references.map(item => ({ ...item, avg_price: null })));
+        setReferenceImages(Object.fromEntries(payload.references.filter(item => item.image_url).map(item => [item.reference.toUpperCase(), item.image_url!])));
+        setReferenceEvidence(Object.fromEntries(payload.references.map(item => [referenceEvidenceKey(brand, item.reference), {
+          count: item.listing_count, wtsCount: item.wts_count, wtbCount: item.wtb_count,
+          hasMore: false, image: item.image_url || '',
+        }])));
+        return;
+      }
       const [r, ms, imageResponse] = await Promise.all([
-        fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`),
-        fetch(`/api/model-stats?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).catch(() => null),
-        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&q=${encodeURIComponent(model)}&images=true&pageSize=100`).catch(() => null),
+        fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`, { signal: controller.signal }),
+        fetch(`/api/model-stats?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`, { signal: controller.signal }).catch(() => null),
+        fetch(`/api/reviewed-market-inventory?brand=${encodeURIComponent(brand)}&q=${encodeURIComponent(model)}&images=true&pageSize=100`, { signal: controller.signal }).catch(() => null),
       ]);
       const d = await r.json();
+      if (controller.signal.aborted) return;
 if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily unavailable');
       setPRefs(d.references || []);
       if (imageResponse?.ok) {
         const imagePayload = await imageResponse.json().catch(() => null) as ReviewedMarketResponse | null;
+        if (controller.signal.aborted) return;
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const reference = String(record.reference || '').trim().toUpperCase();
@@ -797,20 +893,36 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       }
       if (ms) {
         const md = await ms.json().catch(() => null);
+        if (controller.signal.aborted) return;
         if (md?.success) setMStats({ total: md.total, wts: md.wts, wtb: md.wtb, stats: md.stats, first_seen: md.first_seen, last_seen: md.last_seen });
       }
     } catch (requestError) {
-      setPickerError(requestError instanceof Error ? requestError.message : 'References are temporarily unavailable');
+      if (!controller.signal.aborted) setPickerError(requestError instanceof Error ? requestError.message : 'References are temporarily unavailable');
     }
-    finally { setPLoading(''); }
+    finally { if (!controller.signal.aborted) setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string, dial = '', brand = '', evidencePage = 1, demandPage = 1) => {
+  const fetchData = useCallback(async (
+    ref: string,
+    dial = '',
+    brand = '',
+    evidencePage = 1,
+    demandPage = 1,
+    condition = '',
+    cursor: string | null = null,
+    targetCursorIndex?: number,
+    demandCursor: string | null = null
+  ) => {
     const normalizedReference = ref.trim();
     if (!normalizedReference) {
       setError('Enter a reference to search');
       return;
     }
+    researchRequestRef.current?.abort();
+    const controller = new AbortController();
+    researchRequestRef.current = controller;
+    pickerRequestRef.current?.abort();
+    setPLoading('');
     setLoading(true);
     setError('');
     setAnalyticsNotice('');
@@ -821,17 +933,36 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setSaleEvidencePage(evidencePage);
     setDemandEvidencePage(demandPage);
     try {
+      const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
       if (dial) params.set('dial', dial);
-      params.set('evidencePage', String(evidencePage));
-      params.set('evidencePageSize', '100');
-      params.set('demandPage', String(demandPage));
-      params.set('demandPageSize', String(WTB_LISTING_PAGE_SIZE));
-      const r = await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
+      if (condition) params.append('condition', condition);
+      if (cursor) {
+        params.set('cursor', cursor);
+      } else if (!canaryEnabled) {
+        params.set('evidencePage', String(evidencePage));
+      }
+      if (canaryEnabled) {
+        params.set('pageSize', '100');
+        // Phase 5.2: the canary demand lane is keyset-cursor paginated; the
+        // legacy offset param demandPage is hard-rejected (HTTP 400) by
+        // api/canary/price-research. Never send it on the canary path.
+        if (demandCursor) params.set('demandCursor', demandCursor);
+      } else {
+        params.set('evidencePageSize', '100');
+        params.set('demandPage', String(demandPage));
+      }
+      const r = canaryEnabled
+        ? await fetch(`/api/canary/price-research?${params.toString()}`, { credentials: 'include', signal: controller.signal })
+        : await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include', signal: controller.signal });
       const d = await r.json();
+      if (controller.signal.aborted) return;
       if (d.success) {
         setData(d);
+        if (targetCursorIndex !== undefined) {
+          setCursorIndex(targetCursorIndex);
+        }
         const resolvedReference = d.resolvedRef || d.reference || normalizedReference;
         setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
@@ -850,11 +981,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         ? `Qualified market price analytics for ${brand} ${normalizedReference} are compiling. Searching across live dealer observations…`
         : 'Select a brand and reference to view market price research.');
     } catch {
+      if (controller.signal.aborted) return;
       setAnalyticsNotice(brand
         ? `Loading price evidence for ${brand} ${normalizedReference}. Select a suggestion from the search box to view exact model analytics.`
         : 'Select a brand and reference to view market price research.');
     }
-    finally { setLoading(false); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
   }, []);
 
   const selectReferenceSuggestion = useCallback((suggestion: CatalogSuggestion) => {
@@ -911,6 +1043,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   useEffect(() => {
     const controller = new AbortController();
+    if (canaryBrowseEnabled) {
+      void loadPublishedBrowse('price_research', '', '', controller.signal)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          browseSnapshotRef.current ??= payload.snapshot_id;
+          setPBrands(payload.brands);
+        })
+        .catch(error => { if (error?.name !== 'AbortError') setPickerError('Published watch options are temporarily unavailable'); });
+      return () => controller.abort();
+    }
     Promise.all([
       fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal }).then(response => response.json()),
       fetch('/api/live-release-summary', { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null),
@@ -961,6 +1103,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     return () => controller.abort();
   }, []);
 
+  useEffect(() => () => {
+    pickerRequestRef.current?.abort();
+    researchRequestRef.current?.abort();
+  }, []);
+
   useEffect(() => {
     if (initialBrand && !initialReference) void loadModels(initialBrand);
   }, [initialBrand, initialReference, loadModels]);
@@ -968,7 +1115,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   useEffect(() => {
     const deepLinkReference = initialReference.trim();
     const deepLinkBrand = initialBrand.trim();
-    const deepLinkKey = `${deepLinkBrand}\u0000${deepLinkReference}`;
+    const deepLinkKey = JSON.stringify([deepLinkBrand, deepLinkReference, initialDial.trim(), initialCondition.trim()]);
     if (!deepLinkReference || !deepLinkBrand || loadedDeepLinkRef.current === deepLinkKey) return;
     loadedDeepLinkRef.current = deepLinkKey;
     setSelectedCatalogReference(null);
@@ -977,8 +1124,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setPBrand(deepLinkBrand);
     setReferenceSuggestionsOpen(false);
     setReferenceSuggestions([]);
-    void fetchData(deepLinkReference, '', deepLinkBrand);
-  }, [fetchData, initialBrand, initialReference]);
+    setSelectedCondition(initialCondition.trim());
+    void fetchData(deepLinkReference, initialDial.trim(), deepLinkBrand, 1, 1, initialCondition.trim());
+  }, [fetchData, initialBrand, initialReference, initialDial, initialCondition]);
 
   const openListing = useCallback(async (row: RowData) => {
     listingRequestRef.current.controller?.abort();
@@ -995,7 +1143,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       const contactEndpoint = workbookListing
         ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
         : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&brand=${encodeURIComponent(String(row.brand || queryBrand || data?.brand || ''))}&reference=${encodeURIComponent(String(row.reference || data?.reference || query || ''))}`;
-      void fetch(contactEndpoint, { signal: controller.signal })
+      if (row.contract_version !== 'v2.0' || row.contact_available === true) void fetch(contactEndpoint, { signal: controller.signal })
         .then(async contactResponse => contactResponse.ok ? contactResponse.json().catch(() => null) : null)
         .then(contactPayload => {
           if (listingRequestRef.current.sequence !== sequence || !contactPayload) return;
@@ -1029,19 +1177,19 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           }
         })
         .catch(() => undefined);
-      if (String(row.source || '').toUpperCase() === 'MARIADB_IMMUTABLE_RAW') {
+      if (row.contract_version === 'v2.0' || String(row.source || '').toUpperCase() === 'MARIADB_IMMUTABLE_RAW') {
         const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url
           || row.image_urls?.find(Boolean) || '';
         const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
         const parsedUsd = Number(row.price_usd) > 0 ? Number(row.price_usd) : extractPriceFromRawText(rawMessage);
         setListingDetail({
           id: row.id,
-          brand: queryBrand || data?.brand || 'Watch',
-          model: data?.model || null,
-          reference: data?.reference || query,
-          price_raw: row.source_price_amount ?? parsedUsd,
-          price_usd: parsedUsd,
-          price_evidence_status: Number(parsedUsd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
+          brand: row.brand || queryBrand || data?.brand || 'Watch',
+          model: row.model || data?.model || null,
+          reference: row.reference || data?.reference || query,
+          price_raw: row.source_price_amount ?? parsedUsd ?? row.price_usd,
+          price_usd: parsedUsd ?? row.price_usd,
+          price_evidence_status: row.price_evidence_status || (Number(parsedUsd || row.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED'),
           currency: row.source_currency || (Number(parsedUsd) > 0 ? 'USD' : null),
           raw_message: rawMessage || null,
           raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
@@ -1060,7 +1208,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           image_evidence_label: imageCandidate ? 'Source-supplied listing image' : null,
           image_evidence_notice: imageCandidate ? 'Exact image retained with this immutable source listing.' : null,
           region: null,
-          source_type: 'qnsa_reviewed_release',
+          source_type: row.contract_version === 'v2.0' ? 'canonical_v2' : 'qnsa_reviewed_release',
           listing_status: row.listing_status || null,
           confidence: row.confidence == null ? null : Number(row.confidence),
         });
@@ -1118,6 +1266,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         min: data.stats.min,
         max: data.stats.max,
         count: data.count,
+        q1: data.stats.q1,
+        q3: data.stats.q3,
+        iqr: data.stats.iqr,
+        lower_fence: data.stats.lower_fence,
+        upper_fence: data.stats.upper_fence,
+        iqr_multiplier: data.stats.iqr_multiplier ?? 3.0,
       }
     : null;
 
@@ -1129,10 +1283,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     ?? 0;
   const wtbDemandCount = data?.reconciliation?.wtb_demand_count
     ?? data?.wtb_demand_count
+    ?? data?.wtb_count
     ?? data?.liquidity?.demand_count
     ?? 0;
   const referenceQualifiedWtsCount = data?.reconciliation?.reference_qualified_wts_count
     ?? data?.reference_qualified_wts_count
+    ?? data?.wts_count
     ?? qualifiedWtsCount;
   const liveWtbWtsRatio = referenceQualifiedWtsCount > 0 ? wtbDemandCount / referenceQualifiedWtsCount : null;
   const displayedWtbWtsRatio = data?.liquidity?.wtb_fs_ratio ?? liveWtbWtsRatio;
@@ -1147,8 +1303,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           max_price: data.stats.max,
         }]
       : [];
+  const displayDialOptions = data?.dial_options
+    ? data.dial_options.filter((group): group is { dial_color: string; count: number } => Boolean(group.dial_color && group.dial_color.toLowerCase() !== 'unspecified'))
+      .map(group => ({ ...group, avg_price: group.dial_color === activeDial ? data.stats?.avg ?? null : null }))
+    : displayDialAnalysis;
   const datedHistory = (data?.monthly || []).length > 0;
-  const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - All Conditions`;
+  const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - ${data?.selected_cohort.condition || 'Condition unresolved'}`;
   const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
     month: m.month,
     min: m.min_price,
@@ -1245,6 +1405,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   }, [referencePage, referencePageCount]);
 
   useEffect(() => {
+    if (canaryBrowseEnabled) return;
     if (!pBrand || !visibleRefs.length) return;
     const pending = visibleRefs.filter(item => !referenceEvidence[referenceEvidenceKey(pBrand, item.reference)]);
     if (!pending.length) return;
@@ -1274,6 +1435,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
+  const displayedQueryBrand = pBrands.find(item => item.brand.toLowerCase() === queryBrand.toLowerCase())?.brand || queryBrand;
+  const displayedPickerBrand = pBrands.find(item => item.brand.toLowerCase() === pBrand.toLowerCase())?.brand || pBrand;
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
@@ -1307,20 +1470,20 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             <div>
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
               <p className="mt-1 max-w-xl text-sm text-white/60">Search catalog-backed market evidence by watch reference.</p>
-              {queryBrand === 'Rolex' && <p className="mt-2 text-xs text-[#d8be7a]">All available Rolex references are searchable. Select an autocomplete result to load that reference’s WTS prices, WTB demand, users, raw listings, and charts.</p>}
+              {displayedQueryBrand === 'Rolex' && <p className="mt-2 text-xs text-[#d8be7a]">All available Rolex references are searchable. Select an autocomplete result to load that reference’s WTS prices, WTB demand, users, raw listings, and charts.</p>}
             </div>
             <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
               <label className="block">
                 <span className="sr-only">Watch brand</span>
                 <select
                   aria-label="Watch brand"
-                  value={queryBrand}
+                  value={displayedQueryBrand}
                   onChange={event => void loadModels(event.target.value)}
                   className="h-11 w-full rounded-md border border-white/20 bg-[#1a1a20] px-3 text-sm text-white outline-none focus:border-[#c9a03a]"
                 >
                   <option value="">Select brand</option>
-                  {queryBrand && !pBrands.some(item => item.brand === queryBrand) && (
-                    <option value={queryBrand}>{queryBrand}</option>
+                  {displayedQueryBrand && !pBrands.some(item => item.brand === displayedQueryBrand) && (
+                    <option value={displayedQueryBrand}>{displayedQueryBrand}</option>
                   )}
                   {pBrands.map(item => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
                 </select>
@@ -1418,7 +1581,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           </div>
           <PriorityReferenceShortcuts
             mode="research"
-            activeBrand={queryBrand}
+            activeBrand={displayedQueryBrand}
             activeReference={query}
             onSelect={cohort => {
               setSelectedCatalogReference(null);
@@ -1438,14 +1601,14 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (
             <nav aria-label="Catalog selection" className="mb-4 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
-              <button type="button" onClick={() => { setPBrand(''); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setReferenceQuery(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
+              <button type="button" onClick={() => { void loadModels(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
               {pBrand && <span aria-hidden="true">/</span>}
-              {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); setReferenceQuery(''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
+              {pBrand && <button type="button" onClick={() => { void loadRefs(pBrand, ''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{displayedPickerBrand}</button>}
               {pModel && <span aria-hidden="true">/</span>}
               {pModel && <span>{displayCatalogModel(pModel)}</span>}
             </nav>
           )}
-          <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${displayedPickerBrand} model` : 'Choose a brand'}</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
             Brands come from the complete available inventory. Two source-qualified comparable observations are required before price analytics are published.
           </div>
@@ -1481,8 +1644,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           {pBrand && !pModel && pModels.length > 0 && (
             <>
               <label style={{ display: 'block', marginBottom: 10 }}>
-                <span className="sr-only">Search models for {pBrand}</span>
-                <input type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} placeholder={`Search all ${pModels.length} ${pBrand} models`} style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }} />
+                <span className="sr-only">Search models for {displayedPickerBrand}</span>
+                <input type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} placeholder={`Search all ${pModels.length} ${displayedPickerBrand} models`} style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }} />
               </label>
               <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>{visibleModels.length} of {pModels.length} models</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
@@ -1644,7 +1807,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         {data && (
           <>
             <nav aria-label="Price Research path" className="mb-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
-              <button type="button" onClick={() => { setData(null); setError(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Browse</button>
+              <button type="button" onClick={() => { researchRequestRef.current?.abort(); setLoading(false); setData(null); setError(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Browse</button>
               <span aria-hidden="true">/</span><span>{data.brand}</span>
               {data.model && <><span aria-hidden="true">/</span><span>{data.model}</span></>}
               <span aria-hidden="true">/</span><span>{displayRef}</span>
@@ -1682,21 +1845,25 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               The dial comparison table and graphic analytics are shown below for this reference. Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.
             </aside>
 
-            {displayDialAnalysis.length > 0 && (
+            {displayDialOptions.length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
-                  Each dial appears once. New, Used, and Unspecified listings are combined for analytics; condition remains visible in each listing description.
+                  Select a dial and an exact condition to compare matching observations. Counts cover the frozen evidence; averages require a resolved cohort.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {displayDialAnalysis.map(group => {
+                  {displayDialOptions.map(group => {
                     const selected = data.selected_cohort.dial_color === group.dial_color;
                     return (
                       <button
                         key={group.dial_color}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, group.dial_color, data.brand)}
+                        onClick={() => {
+                          setCursorStack([null]);
+                          setCursorIndex(0);
+                          void fetchData(data.reference, group.dial_color, data.brand, 1, demandEvidencePage, selectedCondition, null, 0);
+                        }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
                           borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
@@ -1706,10 +1873,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                         <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(group.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
                           <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{group.dial_color}</span>
-                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{group.count.toLocaleString()} listings · all conditions combined</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{group.count.toLocaleString()} listings · {selectedCondition || 'all conditions'}</span>
                         </span>
                         <span style={{ color: GREEN, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {group.avg_price == null ? 'No price' : `$${group.avg_price.toLocaleString()}`}
+                          {group.avg_price == null ? 'Select cohort' : `$${group.avg_price.toLocaleString()}`}
                         </span>
                       </button>
                     );
@@ -1718,13 +1885,52 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             )}
 
+            {/* ── Condition Selector for Exact Cohort Resolution ── */}
+            <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Condition cohort</div>
+              <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
+                Select an exact condition to resolve qualified cohort pricing statistics (requires exact brand, reference, dial color, and condition). When &apos;All Conditions&apos; is selected, condition cohort is unresolved and market listings remain available below while verified cohort statistics require exact condition resolution.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {availableConditions.map(cond => {
+                  const isSelected = (cond === 'All Conditions' && !selectedCondition) || selectedCondition.toLowerCase() === cond.toLowerCase();
+                  return (
+                    <button
+                      key={cond}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => {
+                        const nextCond = cond === 'All Conditions' ? '' : cond;
+                        setSelectedCondition(nextCond);
+                        setCursorStack([null]);
+                        setCursorIndex(0);
+                        void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, 1, demandEvidencePage, nextCond, null, 0);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        fontWeight: isSelected ? 700 : 500,
+                        fontSize: 13,
+                        backgroundColor: isSelected ? NAVY : WHITE,
+                        color: isSelected ? WHITE : TEXT,
+                        border: `1px solid ${isSelected ? NAVY : BORDER}`,
+                      }}
+                    >
+                      {cond}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* ── Demand and pricing summary ───────────────────── */}
             <div className="grid grid-cols-1 gap-6 mb-8">
               <div data-testid="wts-supply-summary" style={{ backgroundColor: '#f7f3e8', border: '1px solid #dfca91', borderRadius: 8, padding: 20 }}>
                 <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTS listings for sale</div>
-                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.reconciliation?.wts_loaded_count ?? data.reference_listing_count ?? data.totalListings).toLocaleString()}</div>
+                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.wts_count ?? data.reference_listing_count ?? data.rawCount ?? data.count ?? 0).toLocaleString()}</div>
                 <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-                  All source-backed sale offers for this reference remain available below. Only qualified priced WTS observations enter averages, graphics, and predictions.
+                  Source-backed priced sale offers matching the selected filters remain available below. Only qualified observations in an exact cohort enter averages and graphics.
                 </div>
               </div>
               {/* Pricing Summary */}
@@ -1747,13 +1953,27 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 10 }}>
                       Median price: <strong style={{ color: NAVY }}>${stats.median.toLocaleString()}</strong>
                     </div>
+                    {/* Synthetic statistics require an explicit disposable environment. */}
+                    {import.meta.env.VITE_DISPOSABLE_PREVIEW === 'true' && (
+                      <div data-testid="preview-fixture-stats-label" style={{ fontSize: 11, color: '#92400e', marginTop: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                        Preview fixture statistics — not live market analytics
+                      </div>
+                    )}
+                    {stats.q1 != null && stats.q3 != null && stats.iqr != null && (
+                      <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }} className="flex flex-wrap gap-4">
+                        <span>Q1 (25th): <strong style={{ color: NAVY }}>${stats.q1.toLocaleString()}</strong></span>
+                        <span>Q3 (75th): <strong style={{ color: NAVY }}>${stats.q3.toLocaleString()}</strong></span>
+                        <span>IQR: <strong style={{ color: NAVY }}>${stats.iqr.toLocaleString()}</strong></span>
+                        <span>Outlier fence: <strong style={{ color: NAVY }}>{stats.iqr_multiplier ?? 3.0}× IQR</strong></span>
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                       {data.sample_quality === 'robust' ? 'Strong' : data.sample_quality === 'provisional' ? 'Developing' : 'Observed'} evidence · {stats.count} listings
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are developing — fewer than two dial-qualified observations are confirmed for this reference. Results will appear as more verified listings are processed.
+                  <div style={{ fontSize: 13, color: '#92400e', backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8, padding: '12px 16px', lineHeight: 1.5 }}>
+                    <strong>Cohort Notice:</strong> {data.stats_explanation || 'Analytics are developing — fewer than two qualified observations are confirmed for this exact cohort. Results will appear as more verified listings are processed.'}
                   </div>
                 )}
               </div>
@@ -1772,7 +1992,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   {displayedWtbWtsRatio == null ? 'Not available' : displayedWtbWtsRatio.toFixed(2)}
                 </div>
                 <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>
-                  {wtbDemandCount.toLocaleString()} buyer signals versus {referenceQualifiedWtsCount.toLocaleString()} qualified sale offers for this exact reference.
+                  {wtbDemandCount.toLocaleString()} WTB observations versus {referenceQualifiedWtsCount.toLocaleString()} priced sale observations matching the selected filters.
                 </div>
               </div>
             </section>
@@ -1931,8 +2151,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </>
             ) : (
               <section aria-label="Insufficient price history evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price chart unavailable — no qualified price observations exist for this reference and dial.</h3>
-                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another dial color to inspect its independent evidence. Listing condition is descriptive and does not split the analytics cohort.</p>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price chart unavailable for the selected cohort.</h3>
+                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>{data.stats_explanation || 'Select an exact dial color and condition with at least two qualified observations.'}</p>
               </section>
             )}
 
@@ -1949,7 +2169,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    Every included observation has a positive source-backed price, source-stated currency, usable model/reference and dial evidence, and passes bundle, duplicate, repost, plausibility, and outlier checks. WTB demand is calculated separately. The qualified WTS cohort then uses the market plausibility floor and the 3.0 x IQR formula.
+                    Every included observation has a positive source-backed price, source-stated currency, usable model/reference and dial evidence, exact condition cohort alignment, and passes bundle, duplicate, repost, plausibility, and outlier checks. WTB demand is calculated separately and never classified as outliers. The qualified WTS cohort then uses the market plausibility floor and the 3.0 × IQR formula.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -1989,7 +2209,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </div>
                   {data.evidence?.truncated && (
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
-                      Excluded evidence is paginated with the WTS listings below. It includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the loaded cohort.
+                      Excluded evidence is paginated with the WTS listings below. It includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {(data.evidence?.outliers_total ?? data.outliersRemoved ?? 0).toLocaleString()} exclusions in the loaded cohort.
                     </div>
                   )}
                 </div>
@@ -2003,10 +2223,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
                     <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
-                      Price statistics and charts require at least two qualified WTS observations with usable model/reference and dial evidence, a positive source-backed price, and source-stated currency in the same comparable cohort. WTB requests remain visible as separate demand signals.
+                      Price statistics, quartiles, and IQR fences require an exact resolved cohort (brand, reference/model, dial color, and condition) with at least two qualified WTS observations with source-backed price, verified currency/FX, and plausibility verification. When condition is unresolved (&apos;All Conditions&apos;), individual listings remain browsable below, but aggregate cohort statistics are withheld until an exact condition is selected. WTB requests remain visible as separate demand signals.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
-                      {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
+                      {(data.sampledListings ?? data.rawCount ?? data.count ?? 0).toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved ?? 0).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
                     </div>
                   </div>
                 </div>
@@ -2024,7 +2244,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               )}
               {listings.length > 0 && (
                 <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Priced WTS evidence is accessible page by page, with exact source images when present. Qualified observations power the chart and statistics; priced exclusions remain visible with their reason and never alter the averages. Unpriced WTS stays on the Trading Floor, and WTB requests follow in their own section.
+                  Priced WTS evidence is accessible page by page, with exact source images when present. Qualified observations power the chart and statistics and appear in the listings below. Excluded prices remain in retained review evidence and never alter the averages. Unpriced WTS stays on the Trading Floor, and WTB requests follow in their own section.
                 </div>
               )}
               {listings.map(row => (
@@ -2036,35 +2256,61 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   onOpen={() => void openListing(row)}
                 />
               ))}
-              {saleEvidencePages > 1 && (
-                <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
-                  <button
-                    type="button"
-                    disabled={loading || saleEvidencePage <= 1}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage - 1, demandEvidencePage)}
-                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <ChevronLeft size={15} /> Previous WTS
-                  </button>
-                  <div style={{ color: MUTED, fontSize: 12 }}>
-                    Page {saleEvidencePage.toLocaleString()} of {saleEvidencePages.toLocaleString()} · up to {(data.evidence?.comparable_page_size || 100).toLocaleString()} rows in each evidence category per page
-                  </div>
-                  <button
-                    type="button"
-                    disabled={loading || saleEvidencePage >= saleEvidencePages}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage + 1, demandEvidencePage)}
-                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next WTS <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
-                  </button>
+              <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
+                <button
+                  type="button"
+                  disabled={loading || cursorIndex <= 0}
+                  onClick={() => {
+                    if (cursorIndex <= 0) return;
+                    const prevIndex = cursorIndex - 1;
+                    const prevCursor = cursorStack[prevIndex] || null;
+                    void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, prevIndex + 1, demandEvidencePage, selectedCondition, prevCursor, prevIndex);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft size={15} /> Previous WTS
+                </button>
+                <div style={{ color: MUTED, fontSize: 12 }}>
+                  Page {(cursorIndex + 1).toLocaleString()} · up to {(data.evidence?.comparable_page_size || 100).toLocaleString()} rows in each evidence category per page
                 </div>
-              )}
+                <button
+                  type="button"
+                  disabled={loading || !data?.evidence?.next_cursor}
+                  onClick={() => {
+                    const nextCursor = data?.evidence?.next_cursor;
+                    if (!nextCursor) return;
+                    const nextIndex = cursorIndex + 1;
+                    setCursorStack(prev => [...prev.slice(0, nextIndex), nextCursor]);
+                    void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, nextIndex + 1, demandEvidencePage, selectedCondition, nextCursor, nextIndex);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next WTS <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
+                </button>
+              </div>
             </div>
 
             <DemandSignalsSection
               data={data}
               page={demandEvidencePage}
-              onPageChange={nextPage => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage, nextPage)}
+              onPageChange={nextPage => {
+                const isCursorDemand = typeof data.demand_evidence?.has_more === 'boolean';
+                let demandCursor: string | null = null;
+                if (isCursorDemand) {
+                  // Keyset demand lane: next page follows next_cursor; previous
+                  // pages replay the recorded cursor chain.
+                  if (nextPage > demandCursorHistory.length) {
+                    demandCursor = data.demand_evidence?.next_cursor || null;
+                    if (!demandCursor) return;
+                    setDemandCursorHistory(history => [...history, demandCursor]);
+                  } else {
+                    const chain = demandCursorHistory.slice(0, Math.max(1, nextPage));
+                    demandCursor = chain[chain.length - 1] ?? null;
+                    setDemandCursorHistory(chain);
+                  }
+                }
+                void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, cursorIndex + 1, nextPage, selectedCondition, cursorStack[cursorIndex] || null, cursorIndex, demandCursor);
+              }}
               onOpenListing={row => void openListing(row)}
             />
           </>
@@ -2088,6 +2334,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           comparableCount={data?.count || 0}
           monthly={data?.monthly || []}
           cohortDial={data?.selected_cohort.dial_color || selectedRow.dial_color || ''}
+          cohortCondition={data?.selected_cohort.condition || ''}
         />
       )}
     </div>
@@ -2260,6 +2507,7 @@ function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRec
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRecord; analytics: PriceData | null }) {
   const [sellerOpen, setSellerOpen] = useState(false);
   const [sellerSummary, setSellerSummary] = useState<ReviewedSellerResponse | null>(null);
@@ -2408,6 +2656,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
     : '';
   const evidenceStatus = excludedFromAverages
     ? `Excluded from averages · ${exclusionLabel}`
+    : row.analytics_included === false ? 'Source-backed price · cohort statistics unavailable'
     : 'Included in qualified comparable average';
   return (
     <div style={{ borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE }}>
@@ -2442,7 +2691,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 sm:hidden">
           <span style={{ fontSize: 13, fontWeight: 700, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</span>
-          <span style={{ color: MUTED, fontSize: 9 }}>{excludedFromAverages ? 'Not used in analytics' : 'Used in analytics'}</span>
+          <span style={{ color: MUTED, fontSize: 9 }}>{excludedFromAverages || row.analytics_included === false ? 'Not used in analytics' : 'Used in analytics'}</span>
         </div>
         <div
           style={{
@@ -2476,7 +2725,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       <div className="hidden sm:block" style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</div>
         <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>
-          {excludedFromAverages ? 'Not used in chart or statistics' : 'Used in chart and statistics'}
+          {excludedFromAverages || row.analytics_included === false ? 'Not used in chart or statistics' : 'Used in chart and statistics'}
         </div>
       </div>
       <Eye className="hidden h-3.5 w-3.5 sm:block" style={{ color: MUTED, flexShrink: 0 }} />
@@ -2492,7 +2741,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
   );
 }
 
-function ListingDetailModal({ summary, detail, seller, loading, error, title, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial }: {
+function ListingDetailModal({ summary, detail, seller, loading, error, title, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial, cohortCondition }: {
   summary: RowData;
   detail: ListingDetailData | null;
   seller: ListingSellerData | null;
@@ -2505,6 +2754,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
   comparableCount: number;
   monthly: MonthlyPoint[];
   cohortDial: string;
+  cohortCondition: string;
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
@@ -2538,6 +2788,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     ? Number(summary.price_usd)
     : Number(detail?.price_usd || 0);
   const hasDisplayPrice = Number.isFinite(resolvedDisplayPrice) && resolvedDisplayPrice > 0;
+  const isDemand = String(summary.intent || summary.listing_type || '').toUpperCase() === 'WTB';
   const displayPrice = hasDisplayPrice ? resolvedDisplayPrice : null;
   const rating = rateMarketPrice(displayPrice || 0, benchmark || null, comparableCount);
   const observedDate = observedAt ? observedAt.split('T')[0] : null;
@@ -2566,7 +2817,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     comparisonData.sort((a, b) => a.month.localeCompare(b.month));
   }
   const cohortAverage = Number(benchmark?.avg || 0);
-  const cohortLabel = `${cohortDial || 'Unspecified'} dial · all listing conditions`;
+  const cohortLabel = `${cohortDial || 'Unspecified'} dial · ${cohortCondition || 'condition unresolved'}`;
   const cohortLineColor = dialChartColor(cohortDial || detail?.dial_color || summary.dial_color || '');
   const comparisonPrices = [
     ...monthly.map(point => Number(point.avg_price)),
@@ -2667,9 +2918,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
             <section style={{ padding: 'clamp(22px, 4vw, 42px)' }}>
               <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
                 <span style={{ background: summary.is_outlier ? '#fff2cc' : '#eaf7ef', color: summary.is_outlier ? '#7a5900' : '#166534', padding: '6px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>
-                  {summary.is_outlier ? 'Excluded from market statistics' : 'Included in comparable set'}
+                  {isDemand ? 'WTB request · excluded from sale averages' : summary.is_outlier ? 'Excluded from market statistics' : summary.analytics_included === false ? 'Cohort statistics unavailable' : 'Included in comparable set'}
                 </span>
-                {summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
+                {!isDemand && summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
               </div>
 
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{[detail.brand, detail.model, detail.reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ')}</h1>
@@ -2680,11 +2931,11 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                     ? `${detail.currency} ${Number(detail.price_raw).toLocaleString()}`
                     : 'Price not available for analytics'}
                 <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>
-                  {hasDisplayPrice ? ' USD asking price' : ' · excluded from averages'}
+                  {hasDisplayPrice ? isDemand ? ' USD stated budget' : ' USD asking price' : ' · excluded from averages'}
                 </span>
               </div>
 
-              {hasDisplayPrice ? (
+              {hasDisplayPrice && !isDemand ? (
                 <>
               <DetailCard title="Price rating">
                 <div className="flex items-start gap-4">
@@ -2692,15 +2943,15 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                   <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.55 }}>{rating.reason}</div>
                 </div>
                 {benchmark && comparableCount >= 2 && <div className="grid grid-cols-3 gap-3" style={{ marginTop: 18 }}>
-                  <Metric label="Comparable low" value={`$${benchmark.min.toLocaleString()}`} />
-                  <Metric label="Comparable average" value={`$${benchmark.avg.toLocaleString()}`} />
-                  <Metric label="Comparable high" value={`$${benchmark.max.toLocaleString()}`} />
+                  <Metric label="Comparable low" value={`$${(benchmark.min ?? 0).toLocaleString()}`} />
+                  <Metric label="Comparable average" value={`$${(benchmark.avg ?? 0).toLocaleString()}`} />
+                  <Metric label="Comparable high" value={`$${(benchmark.max ?? 0).toLocaleString()}`} />
                 </div>}
               </DetailCard>
 
               <DetailCard title="Price when posted">
                 <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.5, marginBottom: 14 }}>
-                  Selected listing versus the exact {cohortLabel.toLowerCase()} comparable cohort. Monthly averages use qualified asking-price evidence only.
+                  Selected listing versus the {cohortLabel.toLowerCase()} cohort. {monthly.length ? 'Monthly averages use qualified asking-price evidence only.' : 'Monthly price history is unavailable; the dashed benchmark, when available, represents the full cohort rather than the posting month.'}
                 </div>
                 {comparisonData.length > 0 && observedMonth ? (
                   <>
@@ -2718,7 +2969,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                       </ResponsiveContainer>
                     </div>
                     <div className="flex flex-wrap gap-x-5 gap-y-2" style={{ color: MUTED, fontSize: 11, marginTop: 10 }}>
-                      <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `3px solid ${cohortLineColor}` }} /> Monthly cohort average</span>
+                      {monthly.length > 0 && <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `3px solid ${cohortLineColor}` }} /> Monthly cohort average</span>}
                       <span className="flex items-center gap-2"><span style={{ width: 9, height: 9, borderRadius: '50%', background: GOLD }} /> Selected listing{observedDate ? ` · ${observedDate}` : ''}</span>
                       {cohortAverage > 0 && <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `2px dashed ${MUTED}` }} /> Full cohort average ${Math.round(cohortAverage).toLocaleString()}</span>}
                     </div>
@@ -2731,7 +2982,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               ) : (
                 <DetailCard title="Price evidence">
                   <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.6 }}>
-                    This reviewed listing is displayed for its source post, image, seller, and watch identity. Its price is not used in averages because the raw message does not provide enough explicit currency evidence for a verified USD observation.
+                    {isDemand ? 'This is a buyer request. Any stated budget belongs to the original request and is excluded from sale-price averages and ratings.' : 'This reviewed listing is displayed for its source post, image, seller, and watch identity. Its price is not used in averages because the raw message does not provide enough explicit currency evidence for a verified USD observation.'}
                   </div>
                 </DetailCard>
               )}
@@ -2740,7 +2991,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 {seller?.dealer_name || summaryPosterName || dealerEvidenceProfile ? (
                   <>
                     <ListingDealerEvidence
-                      sellerName={seller?.dealer_name || summaryPosterName || null}
+                      sellerName={summaryPosterName || seller?.dealer_name || null}
                       sellerPhone={null}
                       contactPublicationApproved={false}
                       rating={dealerEvidenceRating}
@@ -2837,8 +3088,8 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
   onOpenListing: (row: RowData) => void;
 }) {
   const displayRef = data.resolvedRef || data.reference || '';
-  const demandCount = data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
-  const qualifiedWtsCount = data.reconciliation?.reference_qualified_wts_count
+  const demandCount = data.wtb_count ?? data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
+  const qualifiedWtsCount = data.wts_count ?? data.reconciliation?.reference_qualified_wts_count
     ?? data.reference_qualified_wts_count
     ?? data.reconciliation?.wts_eligible_analytics_count
     ?? data.wts_eligible_analytics_count
@@ -2847,7 +3098,10 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
   const demandSupplyRatio = data.liquidity?.wtb_fs_ratio ?? (qualifiedWtsCount > 0 ? demandCount / qualifiedWtsCount : null);
   const demandCohorts = data.liquidity?.demand_cohorts || [];
   const demandRows = data.demand_rows || data.liquidity?.demand_rows || [];
-  const demandPages = Math.max(1, data.demand_evidence?.pages || 1);
+  const isCursorDemand = typeof data.demand_evidence?.has_more === 'boolean';
+  const demandPages = isCursorDemand
+    ? Math.max(1, page + (data.demand_evidence?.has_more ? 1 : 0))
+    : Math.max(1, data.demand_evidence?.pages || 1);
 
   return (
     <div style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -2862,7 +3116,7 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
             </h3>
           </div>
           <p style={{ fontSize: 12, color: MUTED, margin: '4px 0 0' }}>
-            Want-To-Buy (WTB) listings representing active buyer interest for {displayRef} across all dial descriptions. Strictly separated from WTS asking-price averages.
+            Source-backed Want-To-Buy (WTB) observations for {displayRef} matching the selected filters. Requests remain separate from WTS asking-price averages; current interest must be confirmed with the poster.
           </p>
         </div>
 
@@ -2870,7 +3124,7 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
           <div>
             <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>Total WTB Volume</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: BLUE }}>
-              {demandCount.toLocaleString()} <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>buyers</span>
+              {demandCount.toLocaleString()} <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>requests</span>
             </div>
           </div>
           {demandSupplyRatio != null && (
@@ -2931,7 +3185,7 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
               </div>
               <button
                 type="button"
-                disabled={page >= demandPages}
+                disabled={isCursorDemand ? !data.demand_evidence?.has_more : page >= demandPages}
                 onClick={() => onPageChange(page + 1)}
                 className="inline-flex items-center gap-1 rounded-md border bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -3057,19 +3311,24 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
 }
 
 function mapWtbToRowData(row: WtbListingData): RowData {
+  const imageEvidence = ['SOURCE_LINKED_IMAGE', 'SOURCE_LISTING_IMAGE', 'SELLER_LISTING_IMAGE', 'REFERENCE_IMAGE', 'NO_IMAGE'].includes(String(row.image_evidence_type))
+    ? row.image_evidence_type as RowData['image_evidence_type'] : undefined;
   return {
+    ...row,
     id: row.id,
     price_usd: row.price_usd || null,
-    created_at: row.created_at || new Date().toISOString(),
+    created_at: row.created_at || '',
     listing_date: row.listing_date || row.created_at || null,
     dial_color: row.dial_color || null,
     condition: row.condition || null,
     source: 'WTB_DEMAND',
     year: null,
-    is_outlier: true,
+    is_outlier: false,
+    analytics_included: false,
     outlier_reason: null,
-    source_price_amount: row.price_raw ? Number(row.price_raw) : null,
-    source_currency: row.currency || null,
+    source_price_amount: row.original_price_amount ?? (row.price_raw ? Number(row.price_raw) : null),
+    source_currency: row.original_price_currency || row.currency || null,
+    image_evidence_type: imageEvidence,
     posted_by: row.seller_name || null,
     phone_number: row.contact_publication_approved === true ? row.seller_phone || null : null,
     seller_name: row.seller_name || null,

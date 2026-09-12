@@ -1,0 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "tools/mariadb-live/Dockerfile.shadow-capture"
+
+[deploy]
+startCommand = "node tools/mariadb-live/run-full-private-capture.cjs"
+restartPolicyType = "NEVER"

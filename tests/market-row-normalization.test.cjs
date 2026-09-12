@@ -121,3 +121,14 @@ test('withholds bare-dollar and non-pegged currency without dated FX', () => {
   assert.equal(ambiguous.source_currency_evidence, 'BARE_DOLLAR_UNRESOLVED');
   assert.equal(eur.analytics_currency_status, 'CURRENCY_RATE_UNVERIFIED');
 });
+
+test('withholds an ambiguous decimal-comma price instead of silently converting it to 282 USD', () => {
+  const result = normalizeMarketRow({
+    price_usd: 282,
+    raw_message: 'Rolex 116500LN white dial USD 28,2',
+  }, '116500LN');
+  assert.equal(result.analytics_price_usd, null);
+  assert.equal(result.analytics_currency_status, 'AMBIGUOUS_PRICE_FORMAT');
+  assert.equal(result.source_price_amount, null);
+  assert.equal(result.price_normalization, null);
+});

@@ -1,0 +1,22 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "total_errors": 0,
+  "errors_by_profile": [
+    {
+      "profile": "w1_b250",
+      "errors": 0
+    },
+    {
+      "profile": "w4_b250",
+      "errors": 0
+    },
+    {
+      "profile": "w8_b250",
+      "errors": 0
+    },
+    {
+      "profile": "w16_b250",
+      "errors": 0
+    }
+  ]
+}

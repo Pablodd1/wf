@@ -1,0 +1,6 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "canary_run_key": "full-capture-canary-1k-1788027138860",
+  "total_errors": 0,
+  "ledger_entries": []
+}

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { stagingRow } = require('../tools/multilisting/prepare-unbundled-staging.cjs');
+const { childPriceEvidenceScope, stagingRow } = require('../tools/multilisting/prepare-unbundled-staging.cjs');
 const { partitionWritableRows } = require('../tools/multilisting/stage-unbundled-manifest.cjs');
 const { serializeJsonLine } = require('../tools/multilisting/json-line.cjs');
 
@@ -16,6 +16,7 @@ test('creates a stable pending staging UUID while preserving the child audit key
     price_currency: 'HKD', listing_type: 'WTS', parser_version: 'manual-unbundle-full-v4',
     review_bucket: 'review-ready', exact_raw_lineage: true, catalog_confirmed: true,
     catalog_dial_confirmed: true, blockers: [], review_reasons: [],
+    currency_evidence: 'explicit_line_currency',
   };
   const lineage = { source_created_at: '2026-07-01T00:00:00Z' };
   const first = stagingRow(source, lineage, 'f94506b0-17a9-4656-9b51-9e81ed052ab8');
@@ -23,9 +24,33 @@ test('creates a stable pending staging UUID while preserving the child audit key
   assert.equal(first.id, second.id);
   assert.match(first.id, /^[0-9a-f-]{36}$/i);
   assert.equal(first.field_confidence.source_child_id, source.listing_id);
+  assert.equal(first.parent_source_id, source.source_record_id);
+  assert.equal(first.source_child_id, source.listing_id);
+  assert.equal(first.source_child_index, 0);
+  assert.equal(first.raw_child_line, source.raw_line);
+  assert.equal(first.price_evidence_scope, 'EXPLICIT_CHILD_LINE');
   assert.equal(first.verdict, 'PENDING');
   assert.equal(first.confidence, 0);
   assert.equal(first.has_images, false);
+});
+
+test('does not inherit a collapsed parent price when child price evidence is absent', () => {
+  const row = stagingRow({
+    listing_id: 'source-parent_002', source_record_id: 'source-parent', child_index: 2,
+    raw_line: '5712/1A blue', brand: 'Patek Philippe', reference: '5712/1A',
+    listing_type: 'WTS', parser_version: 'manual-unbundle-full-v4', review_bucket: 'review-ready',
+    exact_raw_lineage: true, catalog_confirmed: true, blockers: [], review_reasons: [],
+  }, {}, 'f94506b0-17a9-4656-9b51-9e81ed052ab8');
+  assert.equal(row.price_raw, undefined);
+  assert.equal(row.price_usd, undefined);
+  assert.equal(row.currency, undefined);
+  assert.equal(row.price_evidence_scope, 'NO_PRICE_EVIDENCE');
+});
+
+test('price evidence classification fails closed', () => {
+  assert.equal(childPriceEvidenceScope({ price_raw: 100, currency_evidence: 'section_currency' }), 'INHERITED_SECTION_CONTEXT');
+  assert.equal(childPriceEvidenceScope({ price_raw: 100, currency_evidence: 'source_record_currency' }), 'REVIEW_REQUIRED');
+  assert.equal(childPriceEvidenceScope({}), 'NO_PRICE_EVIDENCE');
 });
 
 test('marks absent dealer attribution instead of inventing contact data', () => {

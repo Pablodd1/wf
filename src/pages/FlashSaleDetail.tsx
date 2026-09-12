@@ -33,12 +33,10 @@ export default function FlashSaleDetail() {
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/listings?limit=100&search=${encodeURIComponent(id)}`);
+        const res = await fetch(`/api/trading-listing?id=${encodeURIComponent(id)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
-        const allRows = result.rows || result || [];
-        const data = Array.isArray(allRows) ? allRows.filter((r: any) => r.id === id || r.id?.endsWith(id)) : [];
-        if (data?.[0]) setListing(data[0]);
+        if (result?.listing) setListing(result.listing);
         else setError('Listing not found');
       } catch (err: any) {
         setError(err.message);

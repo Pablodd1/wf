@@ -13,8 +13,26 @@ function explicitAmount(line, currencies) {
   const currentYear = new Date().getUTCFullYear();
   return [line.match(before), line.match(after)]
     .filter(Boolean)
+    .filter(match => !isAmbiguousCommaAmount(match[1], match[2]))
     .map(match => parseNumber(match[1], match[2]))
     .find(amount => amount && !(Number.isInteger(amount) && amount >= 1900 && amount <= currentYear + 2)) || null;
+}
+
+function isAmbiguousCommaAmount(rawAmount, multiplier) {
+  if (multiplier) return false;
+  const token = String(rawAmount || '').trim();
+  // A single comma followed by one or two digits can be a decimal comma, a
+  // truncated thousands value, or a typo. The raw evidence must go to review;
+  // silently removing the comma turned values such as `28,2` into USD 282.
+  return /^\d{1,6},\d{1,2}$/.test(token);
+}
+
+function hasAmbiguousExplicitAmount(line, currencies) {
+  const labels = currencies.join('|');
+  const before = new RegExp(`(?:${labels})\\s*[:=$-]?\\s*([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?(?![\\dA-Z])`, 'ig');
+  const after = new RegExp(`([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?\\s*(?:${labels})`, 'ig');
+  return [...String(line || '').matchAll(before), ...String(line || '').matchAll(after)]
+    .some(match => isAmbiguousCommaAmount(match[1], match[2]));
 }
 
 function hasCurrencyToken(line, currencies) {
@@ -59,6 +77,15 @@ function normalizeMarketRow(row, reference) {
   // but cannot influence market statistics.
   if (!line) {
     return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };
+  }
+  if (hasAmbiguousExplicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$', 'HKD', 'HDK', 'HK\\$'])) {
+    return {
+      ...row,
+      analytics_price_usd: null,
+      price_normalization: null,
+      analytics_currency_status: 'AMBIGUOUS_PRICE_FORMAT',
+      source_price_amount: null,
+    };
   }
   const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
   if (usd) {
@@ -109,4 +136,12 @@ function normalizeMarketRow(row, reference) {
   return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };
 }
 
-module.exports = { explicitAmount, hasCurrencyToken, normalizeMarketRow, referenceBlock, referenceLine };
+module.exports = {
+  explicitAmount,
+  hasAmbiguousExplicitAmount,
+  hasCurrencyToken,
+  isAmbiguousCommaAmount,
+  normalizeMarketRow,
+  referenceBlock,
+  referenceLine,
+};

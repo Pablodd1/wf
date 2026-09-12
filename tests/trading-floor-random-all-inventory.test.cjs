@@ -31,7 +31,7 @@ test('combined landing pages preserve an independent cursor for every full feed'
 
 test('combined inventory applies supported filters to both brand streams', () => {
   assert.match(floor, /const combinedFeedActive = \['all', 'watches'\]\.includes\(categoryFilter\)[\s\S]*!brandFilter && !modelFilter && !search/);
-  assert.match(floor, /const combinedAllInventory = combinedFeedActive/);
+  assert.match(floor, /const combinedAllInventory = !canaryEnabled && combinedFeedActive/);
   assert.match(floor, /if \(intent\) params\.set\('type', intent\)/);
   assert.match(floor, /if \(imagesOnly\) params\.set\('images', 'true'\)/);
   assert.match(floor, /if \(pricedOnly\) params\.set\('priced', 'true'\)/);

@@ -1,0 +1,15 @@
+{
+  "reason": "Qualify the dealer link identity in the historical consent-preserving directory function. The identical repair is included in a production forward migration.",
+  "original_sha256": "94069779dabfd165ce25d0cb745f5d8a543b251e9dd18957b156e19b2f452751",
+  "replacements": [
+    {
+      "old": "SELECT dealer_id,",
+      "new": "SELECT link.dealer_id,"
+    },
+    {
+      "old": "GROUP BY dealer_id",
+      "new": "GROUP BY link.dealer_id"
+    }
+  ],
+  "canonical_lf_sha256": "e2f2d75a32c66e54fc61f5d4f521106a53d9e58bd865423bc03008a56822240c"
+}

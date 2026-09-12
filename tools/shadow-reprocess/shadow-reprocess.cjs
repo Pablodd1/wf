@@ -117,7 +117,9 @@ function analyzeRecord(record, options = {}) {
       ? catalog
       : null;
     const dial = resolveDial({
-      sourceDial: record.dial_color,
+      // A collapsed parent dial cannot be assigned to an arbitrary child. Only
+      // retain a structured source dial when the message resolves to one watch.
+      sourceDial: candidates.length === 1 ? record.dial_color : null,
       rawText: candidate.rawLine,
       catalogDials: exactCatalog?.dialColors || [],
     });
