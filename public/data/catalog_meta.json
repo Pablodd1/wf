@@ -1,6 +1,6 @@
 {
-  "total_listings": 1187931,
-  "chunk_count": 36,
+  "total_listings": 1225000,
+  "chunk_count": 49,
   "chunk_size": 50000,
   "total_dealers": 3039,
   "total_research": 17845,
@@ -555,5 +555,6 @@
       "price": 1800000,
       "type": "sale"
     }
-  ]
+  ],
+  "last_updated": "2026-09-11T21:08:00Z"
 }
