@@ -1,89 +1,277 @@
 {
-  "total_listings": 887931,
-  "chunk_count": 24,
+  "total_listings": 1187931,
+  "chunk_count": 36,
   "chunk_size": 50000,
   "total_dealers": 3039,
   "total_research": 17845,
   "sorted_brands": [
     [
       "Rolex",
-      357086
-    ],
-    [
-      "Audemars Piguet",
-      89422
+      565123
     ],
     [
       "Patek Philippe",
-      75902
+      203540
+    ],
+    [
+      "Audemars Piguet",
+      165024
     ],
     [
       "Richard Mille",
-      42564
-    ],
-    [
-      "Vacheron Constantin",
-      7058
+      87279
     ],
     [
       "Cartier",
-      3989
+      22638
     ],
     [
-      "Panerai",
-      3306
+      "Vacheron Constantin",
+      14497
     ],
     [
-      "F.P. Journe",
-      1336
+      "TAG Heuer",
+      7817
     ],
     [
       "Omega",
-      931
+      6398
     ],
     [
-      "IWC",
-      875
+      "Panerai",
+      6354
     ],
     [
       "Hublot",
-      818
+      4177
     ],
     [
-      "Breguet",
-      803
-    ],
-    [
-      "A. Lange & S\u00f6hne",
-      791
-    ],
-    [
-      "Tudor",
-      766
-    ],
-    [
-      "Jaeger-LeCoultre",
-      583
-    ],
-    [
-      "Chopard",
-      527
-    ],
-    [
-      "Zenith",
-      438
+      "IWC",
+      3665
     ],
     [
       "Breitling",
-      308
+      3356
     ],
     [
-      "Girard-Perregaux",
-      250
+      "Tudor",
+      3253
+    ],
+    [
+      "Breguet",
+      2802
+    ],
+    [
+      "A. Lange & S\u00f6hne",
+      2538
+    ],
+    [
+      "Jaeger-LeCoultre",
+      1608
     ],
     [
       "Franck Muller",
-      178
+      1527
+    ],
+    [
+      "F.P. Journe",
+      1359
+    ],
+    [
+      "Zenith",
+      1183
+    ],
+    [
+      "Chopard",
+      1091
+    ],
+    [
+      "Girard-Perregaux",
+      525
+    ],
+    [
+      "Ulysse Nardin",
+      460
+    ],
+    [
+      "Bvlgari",
+      99
+    ],
+    [
+      "Blancpain",
+      12
+    ],
+    [
+      "Tag Heuer",
+      11
+    ],
+    [
+      "Bulgari",
+      10
+    ],
+    [
+      "Piaget",
+      10
+    ],
+    [
+      "Van Cleef & Arpels",
+      7
+    ],
+    [
+      "Roger Dubuis",
+      6
+    ],
+    [
+      "Girard Perregaux",
+      5
+    ],
+    [
+      "Hermes",
+      5
+    ],
+    [
+      "Corum",
+      5
+    ],
+    [
+      "Glash\u00fctte Original",
+      5
+    ],
+    [
+      "HYT",
+      4
+    ],
+    [
+      "Jacob & Co",
+      4
+    ],
+    [
+      "Greubel Forsey",
+      4
+    ],
+    [
+      "Grand Seiko",
+      4
+    ],
+    [
+      "F.P.Journe",
+      4
+    ],
+    [
+      "MB&F",
+      4
+    ],
+    [
+      "Herm\u00e8s",
+      3
+    ],
+    [
+      "Chanel",
+      2
+    ],
+    [
+      "Bovet",
+      2
+    ],
+    [
+      "Harry Winston",
+      2
+    ],
+    [
+      "Jacob & Co.",
+      2
+    ],
+    [
+      "Jaeger",
+      2
+    ],
+    [
+      "Longines",
+      2
+    ],
+    [
+      "A. Lange & S\u00c3\u00b6hne",
+      1
+    ],
+    [
+      "BVLGARI",
+      1
+    ],
+    [
+      "G-Shock",
+      1
+    ],
+    [
+      "Jaeger LeCoultre",
+      1
+    ],
+    [
+      "ArtyA",
+      1
+    ],
+    [
+      "Heuer",
+      1
+    ],
+    [
+      "H. Moser",
+      1
+    ],
+    [
+      "Carl F. Bucherer",
+      1
+    ],
+    [
+      "Bell & Ross",
+      1
+    ],
+    [
+      "Jaquet Droz",
+      1
+    ],
+    [
+      "Sandoz",
+      1
+    ],
+    [
+      "Granat",
+      1
+    ],
+    [
+      "Versace",
+      1
+    ],
+    [
+      "De Bethune",
+      1
+    ],
+    [
+      "Krayon",
+      1
+    ],
+    [
+      "AET",
+      1
+    ],
+    [
+      "Concord",
+      1
+    ],
+    [
+      "ChronoGrid",
+      1
+    ],
+    [
+      "H. Moser & Cie",
+      1
+    ],
+    [
+      "Michele",
+      1
+    ],
+    [
+      "Chronoswiss",
+      1
     ]
   ],
   "ticker_samples": [
