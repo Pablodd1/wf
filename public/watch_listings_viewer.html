@@ -932,6 +932,18 @@
               </div>
             </div>
 
+            <!-- 8. DEDUPLICATION -->
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-2">Deduplication</label>
+              <div class="space-y-1.5 text-xs text-[#1C1917]">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" id="dedup-hide-rebroadcasts" onchange="handleDedupToggle()" checked class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
+                  <span class="font-semibold text-[#1C1917]">No duplicates (Hide rebroadcasts)</span>
+                </label>
+                <span class="text-[10px] text-[#8A7E70] block pl-6">Shows only unique dealer offerings with rebroadcast frequency badges.</span>
+              </div>
+            </div>
+
             <!-- Reset Button -->
             <button
               type="button"
@@ -1179,6 +1191,31 @@
     </div>
   </div>
 
+  <!-- VIEW ORIGINAL BROADCAST MODAL (RAW PARENT MESSAGE MODAL) -->
+  <div id="broadcastModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#FAF6F0] rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-[#E5DACB] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div class="px-6 py-3.5 border-b border-[#E5DACB] flex items-center justify-between bg-[#F6F0E7]">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#8A5826]"></span>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-[#8A5826]">Curated Luxury · Original Raw Broadcast</span>
+        </div>
+        <button onclick="closeBroadcastModal()" class="text-[#8A5826] hover:text-[#1C1917] font-bold text-xl leading-none p-1">×</button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 text-xs">
+        <div class="mb-3">
+          <div id="broadcastItemTitle" class="font-serif font-bold text-lg text-[#1C1917]">Original Listing</div>
+          <div id="broadcastItemDealer" class="text-xs text-[#6B7280]">Posted by Dealer</div>
+        </div>
+        <div class="p-4 rounded-xl bg-[#F6F0E7] border border-[#E5DACB]">
+          <pre id="broadcastMessageContent" class="font-mono text-xs text-stone-900 whitespace-pre-wrap break-words leading-relaxed"></pre>
+        </div>
+      </div>
+      <div class="px-6 py-3 border-t border-[#E5DACB] bg-[#F6F0E7] flex justify-end">
+        <button onclick="closeBroadcastModal()" class="px-5 py-2 rounded-full bg-[#8A5826] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#78350F] transition">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CURATED LUXURY FOOTER -->
   <footer class="bg-[#12100E] text-[#A89F93] border-t border-[#3F3324] mt-auto">
     <!-- Community WhatsApp & Telegram Groups -->
@@ -1240,6 +1277,8 @@
     // 1. Master State & Progressive Streaming Data Engine
     let ALL_LISTINGS = [];
     const listingsById = new Map();
+    window.ALL_LISTINGS = ALL_LISTINGS;
+    window.listingsById = listingsById;
     let broadcastsMap = {};
     let researchList = [];
     const researchIndex = {};
@@ -1262,6 +1301,7 @@
         const chunk0Res = await fetch('data/listings_chunk_0.json');
         const chunk0 = await chunk0Res.json();
         ALL_LISTINGS = chunk0;
+        window.ALL_LISTINGS = ALL_LISTINGS;
         chunk0.forEach(it => listingsById.set(it.id, it));
 
         // Inject persistent / seed dealer posts created via Post It
@@ -1295,12 +1335,14 @@
         auxiliaryPromise = Promise.all([
           fetch('data/price_research_data.json').then(r => r.json()),
           fetch('data/evidence_by_ref.json').then(r => r.json()),
-          fetch('data/dealers_directory.json').then(r => r.json())
-        ]).then(([pRes, eRes, dRes]) => {
+          fetch('data/dealers_directory.json').then(r => r.json()),
+          fetch('data/broadcasts_map.json').then(r => r.json()).catch(() => ({}))
+        ]).then(([pRes, eRes, dRes, bRes]) => {
           researchList = pRes;
           researchList.forEach(r => { researchIndex[r.normalized_key] = r; });
           evidenceByRef = eRes;
           DEALERS_LIST = dRes;
+          broadcastsMap = bRes || {};
           dealersByName = {};
           dealersByPhone = {};
           DEALERS_LIST.forEach(d => {
@@ -1718,9 +1760,18 @@
       });
     }
 
+    let hideRebroadcasts = true;
+
     function handleEvidenceFilter() {
       evidenceImagesOnly = document.getElementById('evid-img-only').checked;
       evidencePriceOnly = document.getElementById('evid-price-only').checked;
+      currentPage = 1;
+      renderListings();
+    }
+
+    function handleDedupToggle() {
+      const el = document.getElementById('dedup-hide-rebroadcasts');
+      hideRebroadcasts = el ? el.checked : true;
       currentPage = 1;
       renderListings();
     }
@@ -1738,6 +1789,7 @@
       selectedLocations = new Set(['all']);
       evidenceImagesOnly = false;
       evidencePriceOnly = false;
+      hideRebroadcasts = true;
       currentSearch = '';
       currentOrder = 'source-images-first';
       currentPage = 1;
@@ -1758,6 +1810,8 @@
       });
       document.getElementById('evid-img-only').checked = false;
       document.getElementById('evid-price-only').checked = false;
+      const dedupEl = document.getElementById('dedup-hide-rebroadcasts');
+      if (dedupEl) dedupEl.checked = true;
 
       renderListings();
     }
@@ -1771,7 +1825,7 @@
 
     // Filter Listings
     function getFilteredListings() {
-      return ALL_LISTINGS.filter(item => {
+      const baseFiltered = ALL_LISTINGS.filter(item => {
         // Always include newly published live posts from active session
         if (item.is_live_post) return true;
         // Category filter
@@ -1812,6 +1866,43 @@
 
         return true;
       });
+
+      if (!hideRebroadcasts) return baseFiltered;
+
+      // Deduplication Mode: Compute cryptographic signature counts and keep only primary card
+      const sigCounts = new Map();
+      baseFiltered.forEach(item => {
+        if (item.is_live_post) return;
+        const sig = `${item.from_number || item.from_name || ''}|${item.brand || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
+        sigCounts.set(sig, (sigCounts.get(sig) || 0) + 1);
+      });
+
+      const seenSigs = new Set();
+      const deduped = [];
+      baseFiltered.forEach(item => {
+        if (item.is_live_post) {
+          deduped.push(item);
+          return;
+        }
+        const sig = `${item.from_number || item.from_name || ''}|${item.brand || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
+        if (!seenSigs.has(sig)) {
+          seenSigs.add(sig);
+          item._rebroadcast_count = sigCounts.get(sig) || 1;
+          deduped.push(item);
+        }
+      });
+
+      return deduped;
+    }
+
+    function getListingDisplayTier(item) {
+      const hasImage = Boolean(item.image_url && String(item.image_url).trim() !== '');
+      const isWTB = (item.type === 'wtb' || item.type === 'search');
+      const hasPrice = Boolean(item.price && Number(item.price) > 0 && !isWTB);
+      if (hasImage && hasPrice) return 1;
+      if (hasImage && !hasPrice) return 2;
+      if (!hasImage && hasPrice) return 3;
+      return 4;
     }
 
     function sortListings(items) {
@@ -1820,23 +1911,33 @@
         if (a.is_live_post && !b.is_live_post) return -1;
         if (!a.is_live_post && b.is_live_post) return 1;
 
-        // Strict 3-Tier Priority Sorting by Date of Posting
-        // Tier 1: Single listings with photos/images (most recent date first)
-        // Tier 2: Single listings without photos/images (most recent date first)
-        // Tier 3: Unbundled child listings (most recent date first)
-        const tierA = (a.is_unbundled || a.is_unbundled_child) ? 3 : (a.image_url ? 1 : 2);
-        const tierB = (b.is_unbundled || b.is_unbundled_child) ? 3 : (b.image_url ? 1 : 2);
+        // Strict 4-Tier Display Priority Hierarchy:
+        // Tier 1: With Image AND With Price (sorted high to low)
+        // Tier 2: With Image AND Without Price ($0 / WTB / Request)
+        // Tier 3: Without Image AND With Price (sorted high to low)
+        // Tier 4: Without Image AND Without Price ($0 / WTB / Request)
+        const tierA = getListingDisplayTier(a);
+        const tierB = getListingDisplayTier(b);
         if (tierA !== tierB) return tierA - tierB;
 
-        // Most recent date of posting first
+        // Within Tier 1 and Tier 3: Sort price high to low
+        if (tierA === 1 || tierA === 3) {
+          const priceDiff = (b.price || 0) - (a.price || 0);
+          if (priceDiff !== 0) return priceDiff;
+        }
+
+        // Secondary order: Most recent date of posting first
         const dateA = a.created_on ? new Date(a.created_on.replace(/-/g, '/')).getTime() : 0;
         const dateB = b.created_on ? new Date(b.created_on.replace(/-/g, '/')).getTime() : 0;
         if (dateB !== dateA) return dateB - dateA;
 
-        // Fallback: price descending
         return (b.price || 0) - (a.price || 0);
       });
     }
+
+    // Expose helpers and aliases on window for E2E testing & audits
+    window.getListingDisplayTier = getListingDisplayTier;
+    window.sortListings = sortListings;
 
     // Helper: Escape HTML
     function escapeHtml(str) {
@@ -1848,6 +1949,14 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
+
+    // Helper: Safe Image Error Fallback
+    function handleListingImageError(img) {
+      if (!img) return;
+      img.onerror = null;
+      img.src = "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' fill='%23ccc'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle'%3EIMAGE%3C/text%3E%3C/svg%3E";
+    }
+    window.handleListingImageError = handleListingImageError;
 
     // 7. RENDER TRADING FLOOR CARDS
     function renderListings() {
@@ -1969,7 +2078,7 @@
             </span>
           `;
         }
-        const fullBroadcast = broadcastsMap[item.parent_id] || item.extracted_line || 'No raw source broadcast attached.';
+        const fullBroadcast = (item.parent_id && broadcastsMap[item.parent_id]) || broadcastsMap[item.id] || item.extracted_line || 'No raw source broadcast attached.';
         const cleanRef = item.reference && item.reference !== 'Uncataloged' ? item.reference : '';
 
         // Dealer review lookup
@@ -1985,7 +2094,7 @@
             <article class="flex flex-col sm:flex-row rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md gap-5">
               <div class="w-full sm:w-56 h-56 shrink-0 overflow-hidden rounded-md bg-stone-100 cursor-pointer" onclick="openAvailabilityModal('${item.id}')">
                 ${item.image_url ? `
-                  <img src="${item.image_url}" alt="${item.brand} ${item.model}" class="w-full h-full object-cover object-center transition hover:scale-105" loading="lazy" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' fill=\'%23ccc\'><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\'>IMAGE</text></svg>'"/>
+                  <img src="${item.image_url}" alt="${item.brand} ${item.model}" class="w-full h-full object-cover object-center transition hover:scale-105" loading="lazy" onerror="handleListingImageError(this)"/>
                 ` : `
                   <div class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
                     <span class="text-2xl mb-1">⌚</span>
@@ -2000,6 +2109,18 @@
                     <span class="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#9E6B38]">
                       ${item.category?.toUpperCase() || 'WATCH'}
                     </span>
+                    ${(item._rebroadcast_count && item._rebroadcast_count > 1) ? `
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#EFE5D8] text-[#653E23] border border-[#E5DACB]" title="This piece was re-broadcast ${item._rebroadcast_count} times across WhatsApp groups">
+                        <span>🔄</span>
+                        <span>Re-posted ${item._rebroadcast_count}x</span>
+                      </span>
+                    ` : ''}
+                    ${(item.is_live_post || item.origin === 'Dealer Portal (Post It)') ? `
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-bold uppercase tracking-wider shadow-xs">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                        <span>Post It Live</span>
+                      </span>
+                    ` : ''}
                     ${isWTB ? `
                       <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
                         WTB / BUYER REQUEST
@@ -2017,9 +2138,14 @@
 
                   <!-- Collapsible Raw Message -->
                   <details class="group mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2">
-                    <summary class="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none">
-                      <span class="transition-transform group-open:rotate-90">▶</span>
-                      <span>Original raw message</span>
+                    <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none">
+                      <div class="flex items-center gap-1.5">
+                        <span class="transition-transform group-open:rotate-90">▶</span>
+                        <span>Original raw message</span>
+                      </div>
+                      <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case">
+                        View in modal ↗
+                      </button>
                     </summary>
                     <div class="mt-2 max-h-48 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
                       ${escapeHtml(fullBroadcast)}
@@ -2049,7 +2175,7 @@
             <!-- 1. Top Image -->
             <button type="button" onclick="openAvailabilityModal('${item.id}')" class="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
               ${item.image_url ? `
-                <img alt="${item.brand} ${item.model}" class="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]" loading="lazy" src="${item.image_url}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' fill=\'%23ccc\'><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\'>IMAGE</text></svg>'"/>
+                <img alt="${item.brand} ${item.model}" class="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]" loading="lazy" src="${item.image_url}" onerror="handleListingImageError(this)"/>
               ` : `
                 <div class="h-[340px] w-full flex flex-col items-center justify-center p-6 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
                   <span class="text-4xl mb-2">⌚</span>
@@ -2067,6 +2193,12 @@
                   <span class="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#9E6B38]">
                     ${item.category?.toUpperCase() || 'WATCH'}
                   </span>
+                  ${(item._rebroadcast_count && item._rebroadcast_count > 1) ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#EFE5D8] text-[#653E23] border border-[#E5DACB]" title="This piece was re-broadcast ${item._rebroadcast_count} times across WhatsApp groups">
+                      <span>🔄</span>
+                      <span>Re-posted ${item._rebroadcast_count}x</span>
+                    </span>
+                  ` : ''}
                   ${(item.is_live_post || item.origin === 'Dealer Portal (Post It)') ? `
                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-bold uppercase tracking-wider shadow-xs">
                       <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
@@ -2092,9 +2224,14 @@
 
             <!-- 3. Collapsible Original Raw Message -->
             <details class="group mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-              <summary class="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
-                <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
-                <span>Original raw message</span>
+              <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                <div class="flex items-center gap-1.5">
+                  <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
+                  <span>Original raw message</span>
+                </div>
+                <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case">
+                  View in modal ↗
+                </button>
               </summary>
               <div class="mt-2.5 max-h-72 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
                 ${escapeHtml(fullBroadcast)}
@@ -2151,6 +2288,9 @@
 
       renderPagination(totalPages);
     }
+
+    // Explicit alias for test harnesses & card grid auditors
+    window.renderCardsGrid = renderListings;
 
     function renderPagination(totalPages) {
       const c = document.getElementById('paginationControls');
@@ -2624,7 +2764,7 @@
       const hasPrice = item.price && item.price > 0;
       const formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (isSale ? 'Price on Request' : 'WTB');
       const cleanRef = item.reference && item.reference !== 'Uncataloged' ? item.reference : '';
-      const fullBroadcast = broadcastsMap[item.parent_id] || item.extracted_line || 'No raw source broadcast attached.';
+      const fullBroadcast = (item.parent_id && broadcastsMap[item.parent_id]) || broadcastsMap[item.id] || item.extracted_line || 'No raw source broadcast attached.';
 
       document.getElementById('availCategory').textContent = `${item.category?.toUpperCase() || 'WATCH'} · ${isSale ? 'FOR SALE' : 'WANT TO BUY'}`;
       document.getElementById('availTitle').textContent = `${item.brand} ${item.model} ${cleanRef}`;
@@ -2678,7 +2818,7 @@
       document.getElementById('availDealerMeta').textContent = `${item.dealer_rating || 'Not rated'} · ${item.country || 'Location not published'}`;
 
       // Inquiry Text Assistant
-      const cleanPhone = (item.from_number || '').replace(/\\D/g, '');
+      const cleanPhone = (item.from_number || '').replace(/\D/g, '');
       const defaultInquiry = `Hi ${item.from_name || 'there'}, I found your listing on Curated Luxury: ${item.brand} ${item.model} ${cleanRef} listed at ${formattedPrice}. Is this piece currently available?`;
       const txt = document.getElementById('availInquiryText');
       txt.value = defaultInquiry;
@@ -2704,6 +2844,37 @@
     function closeAvailabilityModal() {
       document.getElementById('availabilityModal').classList.add('hidden');
     }
+
+    // 10.1 VIEW ORIGINAL BROADCAST MODAL
+    function openBroadcastModal(id) {
+      const item = listingsById.get(id) || ALL_LISTINGS.find(i => i.id === id);
+      if (!item) return;
+
+      const fullBroadcast = (item.parent_id && broadcastsMap[item.parent_id]) || broadcastsMap[item.id] || item.extracted_line || 'No raw source broadcast attached.';
+      const cleanRef = item.reference && item.reference !== 'Uncataloged' ? item.reference : '';
+
+      const titleEl = document.getElementById('broadcastItemTitle');
+      if (titleEl) titleEl.textContent = `${item.brand} ${item.model} ${cleanRef}`;
+
+      const dealerEl = document.getElementById('broadcastItemDealer');
+      if (dealerEl) dealerEl.textContent = `Posted by ${item.from_name || 'Verified Dealer'} · ${item.location || item.country || 'Global'} · ${item.created_on || ''}`;
+
+      const contentEl = document.getElementById('broadcastMessageContent');
+      if (contentEl) contentEl.textContent = fullBroadcast;
+
+      const modal = document.getElementById('broadcastModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeBroadcastModal() {
+      const modal = document.getElementById('broadcastModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    window.openAvailabilityModal = openAvailabilityModal;
+    window.closeAvailabilityModal = closeAvailabilityModal;
+    window.openBroadcastModal = openBroadcastModal;
+    window.closeBroadcastModal = closeBroadcastModal;
 
     // Scroll Indicator Tracking
     window.addEventListener('scroll', () => {
