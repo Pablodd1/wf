@@ -18,8 +18,6 @@ const HEADER_LINKS: HeaderLink[] = [
   { label: 'POST IT', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
   { label: 'REFERENCE CHECK', to: '/dealers' },
-  { label: 'WORKSPACE', to: '/dealer/workspace' },
-  { label: 'DEALER ACCOUNT', to: '/dealer/account/profile' },
 ];
 
 const LANDING_LINKS: HeaderLink[] = [
@@ -27,7 +25,6 @@ const LANDING_LINKS: HeaderLink[] = [
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'POST IT', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
-  { label: 'WORKSPACE', to: '/dealer/workspace' },
 ];
 
 type MarketHeaderProps = {
