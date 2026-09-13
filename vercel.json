@@ -30,6 +30,15 @@
           "value": "public, max-age=86400, stale-while-revalidate=604800"
         }
       ]
+    },
+    {
+      "source": "/data/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        }
+      ]
     }
   ],
   "rewrites": [
@@ -37,7 +46,8 @@
     { "source": "/extract.html", "destination": "/extract.html" },
     { "source": "/viewer", "destination": "/watch_listings_viewer.html" },
     { "source": "/watch_listings_viewer.html", "destination": "/watch_listings_viewer.html" },
+    { "source": "/data/(.*)", "destination": "/data/$1" },
     { "source": "/marketplace/(.*)", "destination": "/marketplace/$1" },
-    { "source": "/((?!api/|marketplace/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|marketplace/|data/|viewer|watch_listings_viewer.html).*)", "destination": "/index.html" }
   ]
 }

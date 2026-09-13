@@ -23,7 +23,7 @@ function preparePublicAssets(root) {
     const file = path.join(source, name);
     if (fs.existsSync(file)) fs.copyFileSync(file, path.join(target, name));
   }
-  for (const name of ['images', 'video']) {
+  for (const name of ['images', 'video', 'data']) {
     const directory = path.join(source, name);
     if (fs.existsSync(directory)) fs.cpSync(directory, path.join(target, name), { recursive: true });
   }

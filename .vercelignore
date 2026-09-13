@@ -18,10 +18,8 @@ public/marketplace/
 public/enriched_refs.json
 public/dealers.json
 public/parsedWatches.json
-public/data/
 data/dealer-directory/
 all_env.txt
-/data/
 /docs/
 /tests/
 *.xlsx
