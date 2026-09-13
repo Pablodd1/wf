@@ -35,6 +35,8 @@
   "rewrites": [
     { "source": "/extract", "destination": "/extract.html" },
     { "source": "/extract.html", "destination": "/extract.html" },
+    { "source": "/viewer", "destination": "/watch_listings_viewer.html" },
+    { "source": "/watch_listings_viewer.html", "destination": "/watch_listings_viewer.html" },
     { "source": "/marketplace/(.*)", "destination": "/marketplace/$1" },
     { "source": "/((?!api/|marketplace/).*)", "destination": "/index.html" }
   ]
