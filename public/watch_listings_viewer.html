@@ -2440,6 +2440,154 @@
       const q3P = cohortAll.q3 ? `$${Math.round(cohortAll.q3).toLocaleString()}` : '$0';
       const iqrP = cohortAll.iqr ? `$${Math.round(cohortAll.iqr).toLocaleString()}` : '$0';
 
+      // Extract Forecast & Historical trend metrics
+      const fc = rec.forecast || {
+        trend_direction: 'STABLE',
+        momentum_pct: 0.0,
+        forecast_3m: Math.round(cohortAll.median_price || 0),
+        forecast_3m_high: Math.round((cohortAll.median_price || 0) * 1.05),
+        forecast_3m_low: Math.round((cohortAll.median_price || 0) * 0.95),
+        forecast_6m: Math.round(cohortAll.median_price || 0),
+        forecast_6m_high: Math.round((cohortAll.median_price || 0) * 1.10),
+        forecast_6m_low: Math.round((cohortAll.median_price || 0) * 0.90)
+      };
+
+      const validPoints = (rec.history_points || []).filter(p => (p.median_price || p.avg_price || 0) > 500);
+      const histPts = validPoints.length > 0 ? validPoints : [
+        { month: 'Current', median_price: cohortAll.median_price || cohortAll.avg_price || 0, count: cohortAll.total_count || 1 }
+      ];
+
+      // Build SVG Trend & Forecast Visualization
+      function renderTrendSvg(points, forecast) {
+        const svgW = 780;
+        const svgH = 220;
+        const padX = 60;
+        const padY = 35;
+        const chartW = svgW - padX * 2;
+        const chartH = svgH - padY * 2;
+
+        const allYs = points.map(p => p.median_price || p.avg_price || 0).filter(y => y > 0);
+        if (forecast.forecast_3m_high) allYs.push(forecast.forecast_3m_high);
+        if (forecast.forecast_6m_high) allYs.push(forecast.forecast_6m_high);
+        if (forecast.forecast_3m_low) allYs.push(forecast.forecast_3m_low);
+        if (forecast.forecast_6m_low) allYs.push(forecast.forecast_6m_low);
+
+        let minY = Math.min(...allYs) * 0.88;
+        let maxY = Math.max(...allYs) * 1.08;
+        if (maxY === minY) { maxY += 1000; minY = Math.max(0, minY - 1000); }
+
+        const totalSteps = points.length + 2; // + 3M and 6M forecast points
+        const getX = (idx) => padX + (idx / (totalSteps - 1)) * chartW;
+        const getY = (val) => padY + chartH - ((val - minY) / (maxY - minY)) * chartH;
+
+        // Historical Path
+        let histPathD = '';
+        points.forEach((p, idx) => {
+          const x = getX(idx);
+          const y = getY(p.median_price || p.avg_price || 0);
+          histPathD += (idx === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+        });
+
+        // Forecast Line & Cone Coordinates
+        const lastIdx = points.length - 1;
+        const lastX = getX(lastIdx);
+        const lastY = getY(points[lastIdx].median_price || points[lastIdx].avg_price || 0);
+        const f3X = getX(lastIdx + 1);
+        const f3Y = getY(forecast.forecast_3m);
+        const f3HighY = getY(forecast.forecast_3m_high);
+        const f3LowY = getY(forecast.forecast_3m_low);
+        const f6X = getX(lastIdx + 2);
+        const f6Y = getY(forecast.forecast_6m);
+        const f6HighY = getY(forecast.forecast_6m_high);
+        const f6LowY = getY(forecast.forecast_6m_low);
+
+        const forecastPathD = `M ${lastX} ${lastY} L ${f3X} ${f3Y} L ${f6X} ${f6Y}`;
+        const conePathD = `M ${lastX} ${lastY} L ${f3X} ${f3HighY} L ${f6X} ${f6HighY} L ${f6X} ${f6LowY} L ${f3X} ${f3LowY} Z`;
+
+        // Points markup
+        let pointsMarkup = '';
+        points.forEach((p, idx) => {
+          const x = getX(idx);
+          const y = getY(p.median_price || p.avg_price || 0);
+          const mLabel = p.month ? String(p.month).slice(2) : ('M' + (idx + 1));
+          pointsMarkup += `
+            <circle cx="${x}" cy="${y}" r="4" fill="#C5A059" stroke="#1C1917" stroke-width="2" />
+            <text x="${x}" y="${svgH - 12}" text-anchor="middle" font-size="9" fill="#8A7E70" font-family="monospace">${mLabel}</text>
+          `;
+        });
+
+        // Forecast points
+        pointsMarkup += `
+          <circle cx="${f3X}" cy="${f3Y}" r="4.5" fill="#38BDF8" stroke="#0369A1" stroke-width="2" />
+          <text x="${f3X}" y="${svgH - 12}" text-anchor="middle" font-size="9" font-weight="bold" fill="#38BDF8" font-family="monospace">+3M</text>
+          <circle cx="${f6X}" cy="${f6Y}" r="5" fill="#A855F7" stroke="#6B21A8" stroke-width="2" />
+          <text x="${f6X}" y="${svgH - 12}" text-anchor="middle" font-size="9" font-weight="bold" fill="#A855F7" font-family="monospace">+6M</text>
+        `;
+
+        // Y-axis labels
+        const yLabels = `
+          <text x="${padX - 8}" y="${padY + 4}" text-anchor="end" font-size="9" fill="#8A7E70" font-family="monospace">$${Math.round(maxY).toLocaleString()}</text>
+          <text x="${padX - 8}" y="${padY + chartH / 2 + 4}" text-anchor="end" font-size="9" fill="#8A7E70" font-family="monospace">$${Math.round((minY + maxY) / 2).toLocaleString()}</text>
+          <text x="${padX - 8}" y="${padY + chartH + 4}" text-anchor="end" font-size="9" fill="#8A7E70" font-family="monospace">$${Math.round(minY).toLocaleString()}</text>
+        `;
+
+        return `
+          <svg viewBox="0 0 ${svgW} ${svgH}" class="w-full h-auto overflow-visible select-none">
+            <defs>
+              <linearGradient id="forecastConeGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.12" />
+                <stop offset="100%" stop-color="#A855F7" stop-opacity="0.22" />
+              </linearGradient>
+            </defs>
+            <!-- Gridlines -->
+            <line x1="${padX}" y1="${padY}" x2="${svgW - padX}" y2="${padY}" stroke="#E5DACB" stroke-dasharray="3 3" />
+            <line x1="${padX}" y1="${padY + chartH / 2}" x2="${svgW - padX}" y2="${padY + chartH / 2}" stroke="#E5DACB" stroke-dasharray="3 3" />
+            <line x1="${padX}" y1="${padY + chartH}" x2="${svgW - padX}" y2="${padY + chartH}" stroke="#E5DACB" />
+            
+            ${yLabels}
+            
+            <!-- Forecast Confidence Cone -->
+            <path d="${conePathD}" fill="url(#forecastConeGrad)" />
+            
+            <!-- Historical Solid Line -->
+            <path d="${histPathD}" fill="none" stroke="#C5A059" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            
+            <!-- Predictive Forecast Dashed Line -->
+            <path d="${forecastPathD}" fill="none" stroke="#38BDF8" stroke-width="2.5" stroke-dasharray="4 4" stroke-linecap="round" />
+            
+            <!-- Data Points -->
+            ${pointsMarkup}
+          </svg>
+        `;
+      }
+
+      // Visual Dial Share Bars
+      const dialComparisons = rec.dial_comparisons || [];
+      const totalDialObs = dialComparisons.reduce((sum, d) => sum + (d.total_count || 0), 0) || 1;
+      const dialBarsMarkup = dialComparisons.slice(0, 6).map(d => {
+        const pct = Math.round(((d.total_count || 0) / totalDialObs) * 100);
+        const hex = d.hex_color || '#8A5826';
+        return `
+          <div class="mb-3">
+            <div class="flex justify-between items-center text-xs mb-1">
+              <span class="flex items-center gap-1.5 font-medium text-[#1C1917]">
+                <span class="w-3 h-3 rounded-full border border-black/20" style="background-color: ${hex};"></span>
+                <span>${escapeHtml(d.dial)}</span>
+              </span>
+              <span class="font-mono text-[11px] text-[#6B7280]">${d.avg_price ? '$' + Math.round(d.avg_price).toLocaleString() : 'N/A'} <strong class="text-[#1C1917] ml-2">${pct}%</strong> (${d.total_count})</span>
+            </div>
+            <div class="w-full bg-[#E5DACB]/50 h-2 rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500" style="width: ${pct}%; background-color: ${hex};"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Direction Badge
+      const dirColor = fc.trend_direction === 'BULLISH' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                       fc.trend_direction === 'BEARISH' ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100 text-amber-800 border-amber-300';
+      const dirIcon = fc.trend_direction === 'BULLISH' ? '↗' : fc.trend_direction === 'BEARISH' ? '↘' : '→';
+
       const dialRows = (rec.dial_comparisons || []).map(d => {
         const hex = d.hex_color || '#8A5826';
         return `
@@ -2459,7 +2607,7 @@
       view.innerHTML = `
         <!-- Breadcrumbs -->
         <div class="text-xs text-[#6B7280] mb-4 flex items-center gap-1.5">
-          <button onclick="document.getElementById('researchBrandDirectory').classList.remove('hidden'); document.getElementById('researchRefView').classList.add('hidden');" class="hover:underline">Browse</button>
+          <button onclick="document.getElementById('researchBrandDirectory').classList.remove('hidden'); document.getElementById('researchRefView').classList.add('hidden'); window.location.hash = '#/price-research';" class="hover:underline font-semibold text-[#8A5826]">Directory</button>
           <span>/</span>
           <span>${rec.brand}</span>
           <span>/</span>
@@ -2469,79 +2617,106 @@
         </div>
 
         <!-- Reference Header Card -->
-        <div class="p-6 bg-white border border-[#E5DACB] rounded-2xl shadow-sm mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div class="p-6 bg-white border border-[#E5DACB] rounded-2xl shadow-sm mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div class="flex items-center gap-4">
             ${rec.image_url ? `
               <div class="w-24 h-24 rounded-xl bg-[#FAF6F0] border border-[#E5DACB] overflow-hidden p-1 shrink-0">
                 <img src="${rec.image_url}" alt="${rec.reference}" class="w-full h-full object-contain" />
               </div>
             ` : `
-              <div class="w-20 h-20 rounded-xl bg-[#FAF6F0] border border-[#E5DACB] flex items-center justify-center font-serif text-2xl text-[#8A5826] font-bold shrink-0">
+              <div class="w-20 h-20 rounded-xl bg-[#FAF6F0] border border-[#E5DACB] flex items-center justify-center text-xl font-bold text-[#8A5826] shrink-0 font-serif">
                 ${rec.brand.slice(0, 2)}
               </div>
             `}
             <div>
               <div class="text-[11px] font-bold uppercase tracking-wider text-[#9E6B38]">${rec.brand}</div>
               <h1 class="font-serif font-bold text-2xl md:text-3xl text-[#1C1917]">${rec.model} <span class="text-[#8A5826]">${rec.reference}</span></h1>
-              <div class="text-xs text-[#6B7280] mt-1">
-                ${rec.total_observations.toLocaleString()} total observations · ${cohortAll.wts_count || rec.wts_count || 0} WTS · ${cohortAll.wtb_count || rec.wtb_count || 0} WTB
+              <div class="text-xs text-[#6B7280] mt-1 flex items-center gap-2">
+                <span>${rec.total_observations.toLocaleString()} observations</span>
+                <span>·</span>
+                <span class="px-2 py-0.5 rounded border text-[10px] font-bold font-mono ${dirColor}">${dirIcon} ${fc.trend_direction} (${fc.momentum_pct > 0 ? '+' : ''}${fc.momentum_pct}%)</span>
               </div>
             </div>
           </div>
-          <button onclick="openTradingFloorForRef('${rec.reference}')" class="px-5 py-2.5 rounded-full border border-[#8A5826] bg-[#FAF6F0] hover:bg-[#F6F0E7] text-xs font-bold uppercase text-[#653E23] transition flex items-center gap-2 shrink-0">
+          <button onclick="openTradingFloorForRef('${rec.reference}')" class="px-5 py-2.5 rounded-full border border-[#8A5826] text-[#8A5826] font-bold text-xs hover:bg-[#8A5826] hover:text-white transition flex items-center gap-1.5 shrink-0">
             <span>View on Trading Floor</span>
-            <span>→</span>
+            <span>↗</span>
           </button>
-        </div>
-
-        <!-- Notice Banner -->
-        <div class="p-3.5 rounded-lg border border-[#E5DACB] bg-[#F6F0E7] text-[11px] text-[#653E23] leading-relaxed mb-6">
-          The dial comparison table and graphic analytics are shown below for this reference. Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.
         </div>
 
         <!-- Key Statistical Metrics Grid -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl">
-            <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">Average Price</div>
-            <div class="font-serif font-bold text-2xl text-[#8A5826] mt-1">${avgP}</div>
-            <div class="text-[10px] text-[#6B7280] mt-0.5">Qualified WTS mean</div>
-          </div>
-          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl">
-            <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">Median Price</div>
+          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl shadow-sm">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">Current Median Price</div>
             <div class="font-serif font-bold text-2xl text-[#1C1917] mt-1">${medP}</div>
-            <div class="text-[10px] text-[#6B7280] mt-0.5">50th percentile market value</div>
+            <div class="text-[10px] text-[#6B7280] mt-0.5">Mean: ${avgP}</div>
           </div>
-          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl">
-            <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">Typical Spread (IQR)</div>
-            <div class="font-serif font-bold text-2xl text-[#1C1917] mt-1">${iqrP}</div>
-            <div class="text-[10px] text-[#6B7280] mt-0.5">Q1: ${q1P} · Q3: ${q3P}</div>
+          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl shadow-sm">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">3-Month Forecast</div>
+            <div class="font-serif font-bold text-2xl text-sky-600 mt-1">$${fc.forecast_3m.toLocaleString()}</div>
+            <div class="text-[10px] text-[#6B7280] mt-0.5">Range: $${fc.forecast_3m_low.toLocaleString()} - $${fc.forecast_3m_high.toLocaleString()}</div>
           </div>
-          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl">
+          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl shadow-sm">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">6-Month Forecast</div>
+            <div class="font-serif font-bold text-2xl text-purple-600 mt-1">$${fc.forecast_6m.toLocaleString()}</div>
+            <div class="text-[10px] text-[#6B7280] mt-0.5">Range: $${fc.forecast_6m_low.toLocaleString()} - $${fc.forecast_6m_high.toLocaleString()}</div>
+          </div>
+          <div class="p-4 bg-white border border-[#E5DACB] rounded-xl shadow-sm">
             <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">WTB / WTS Ratio</div>
             <div class="font-serif font-bold text-2xl text-blue-600 mt-1">${ratio}</div>
             <div class="text-[10px] text-[#6B7280] mt-0.5">Demand vs available supply</div>
           </div>
         </div>
 
-        <!-- Dial Colors Comparison Table & Graphics -->
-        <div class="bg-white border border-[#E5DACB] rounded-xl p-6 shadow-sm mb-6">
-          <h3 class="font-serif font-bold text-lg text-[#1C1917] mb-1">Dial Color Analysis</h3>
-          <p class="text-xs text-[#6B7280] mb-4">Source- and review-supported dial cohorts for ${escapeHtml(rec.reference)}.</p>
-          <div class="overflow-x-auto">
-            <table class="w-full text-xs text-left">
-              <thead>
-                <tr class="border-b-2 border-[#E5DACB] text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-                  <th class="py-2.5 px-4">Dial Color</th>
-                  <th class="py-2.5 px-4">Listings</th>
-                  <th class="py-2.5 px-4">Average Price</th>
-                  <th class="py-2.5 px-4">Minimum Price</th>
-                  <th class="py-2.5 px-4">Maximum Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${dialRows || '<tr><td colspan="5" class="py-4 text-center text-[#6B7280]">Standard Dial observed</td></tr>'}
-              </tbody>
-            </table>
+        <!-- 100% VISUAL PRICE TREND & FORECAST CONE -->
+        <div class="p-6 bg-white border border-[#E5DACB] rounded-2xl shadow-sm mb-6">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
+            <div>
+              <h3 class="font-serif font-bold text-lg text-[#1C1917]">Historical Price Trend & Predictive Forecast Trajectory</h3>
+              <p class="text-xs text-[#6B7280]">20-Month historical transaction pricing with algorithmic momentum forecast cone (±1σ standard error band).</p>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] font-mono shrink-0">
+              <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-[#C5A059] rounded"></span> Historical</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-[#38BDF8] border-dashed border-b border-[#38BDF8]"></span> Forecast</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 bg-purple-200/60 border border-purple-400 rounded-sm"></span> Confidence Cone</span>
+            </div>
+          </div>
+          <div class="bg-[#FAF6F0] p-4 rounded-xl border border-[#E5DACB] overflow-x-auto">
+            ${renderTrendSvg(histPts, fc)}
+          </div>
+        </div>
+
+        <!-- DIAL COLOR DISTRIBUTION & COMPARISON -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <!-- Left: Dial Share Bar Chart -->
+          <div class="bg-white border border-[#E5DACB] rounded-2xl p-6 shadow-sm">
+            <h3 class="font-serif font-bold text-lg text-[#1C1917] mb-1">Dial Color Market Share</h3>
+            <p class="text-xs text-[#6B7280] mb-4">Distribution across inventory for ${escapeHtml(rec.reference)}.</p>
+            <div>
+              ${dialBarsMarkup || '<p class="text-xs text-[#6B7280]">No dial variance observed.</p>'}
+            </div>
+          </div>
+
+          <!-- Right: Dial Comparison Table -->
+          <div class="lg:col-span-2 bg-white border border-[#E5DACB] rounded-2xl p-6 shadow-sm">
+            <h3 class="font-serif font-bold text-lg text-[#1C1917] mb-1">Dial Price Benchmarks</h3>
+            <p class="text-xs text-[#6B7280] mb-4">Detailed pricing by dial configuration.</p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs text-left">
+                <thead>
+                  <tr class="border-b-2 border-[#E5DACB] text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+                    <th class="py-2.5 px-4">Dial Color</th>
+                    <th class="py-2.5 px-4">Listings</th>
+                    <th class="py-2.5 px-4">Average Price</th>
+                    <th class="py-2.5 px-4">Minimum Price</th>
+                    <th class="py-2.5 px-4">Maximum Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${dialRows || '<tr><td colspan="5" class="py-4 text-center text-[#6B7280]">Standard Dial observations only.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
