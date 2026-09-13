@@ -14,11 +14,11 @@
     },
     "api/*.js": {
       "maxDuration": 60,
-      "includeFiles": "public/*.json"
+      "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
     },
     "api/**/*.js": {
       "maxDuration": 60,
-      "includeFiles": "public/*.json"
+      "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
     }
   },
   "headers": [
