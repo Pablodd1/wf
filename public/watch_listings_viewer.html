@@ -615,9 +615,9 @@
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
           <div class="flex flex-col gap-1">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span class="font-bold text-[#1C1917] text-sm"><strong id="totalWatchesDisplay" class="text-[#1C1917]">1,223,980</strong> Watches</span>
+              <span class="font-bold text-[#1C1917] text-sm"><strong id="totalWatchesDisplay" class="text-[#1C1917]">1,223,305</strong> Watches</span>
               <span class="text-[#8A5826] font-mono">·</span>
-              <span class="font-bold text-[#8A5826] text-sm"><strong id="totalLuxuryDisplay" class="text-[#8A5826]">1,020</strong> Luxury Items (Non-Watches)</span>
+              <span class="font-bold text-[#8A5826] text-sm"><strong id="totalLuxuryDisplay" class="text-[#8A5826]">1,695</strong> Luxury Items (Non-Watches)</span>
             </div>
             <div class="flex items-center flex-wrap gap-2 text-[11px] text-[#6B7280]">
               <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -820,19 +820,19 @@
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Watches" onchange="toggleCategoryFilter('Watches')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Watches (1,223,980)</span>
+                  <span>Watches (1,223,305)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Handbags" onchange="toggleCategoryFilter('Handbags')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Handbags (676)</span>
+                  <span>Handbags (1,481)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Jewelry" onchange="toggleCategoryFilter('Jewelry')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Jewelry (332)</span>
+                  <span>Jewelry (209)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Accessories" onchange="toggleCategoryFilter('Accessories')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Accessories (12)</span>
+                  <span>Accessories (5)</span>
                 </label>
               </div>
             </div>
@@ -1583,8 +1583,8 @@
     function updateCatalogStatusDisplays() {
       const watchesDisplay = document.getElementById('totalWatchesDisplay');
       const luxuryDisplay = document.getElementById('totalLuxuryDisplay');
-      if (watchesDisplay) watchesDisplay.textContent = (catalogMeta.total_watches || 1223980).toLocaleString('en-US');
-      if (luxuryDisplay) luxuryDisplay.textContent = (catalogMeta.total_luxury_items || 1020).toLocaleString('en-US');
+      if (watchesDisplay) watchesDisplay.textContent = (catalogMeta.total_watches || 1223305).toLocaleString('en-US');
+      if (luxuryDisplay) luxuryDisplay.textContent = (catalogMeta.total_luxury_items || 1695).toLocaleString('en-US');
       
       const sub = document.getElementById('headerSubtitleCount');
       if (sub) {

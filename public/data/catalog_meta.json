@@ -62,7 +62,7 @@
       2802
     ],
     [
-      "A. Lange & S\u00f6hne",
+      "A. Lange & Söhne",
       2538
     ],
     [
@@ -134,7 +134,7 @@
       5
     ],
     [
-      "Glash\u00fctte Original",
+      "Glashütte Original",
       5
     ],
     [
@@ -162,7 +162,7 @@
       4
     ],
     [
-      "Herm\u00e8s",
+      "Hermès",
       3
     ],
     [
@@ -190,7 +190,7 @@
       2
     ],
     [
-      "A. Lange & S\u00c3\u00b6hne",
+      "A. Lange & SÃ¶hne",
       1
     ],
     [
@@ -556,13 +556,13 @@
       "type": "sale"
     }
   ],
-  "last_updated": "2026-09-11T21:08:00Z",
-  "total_watches": 1223980,
-  "total_luxury_items": 1020,
+  "last_updated": "2026-09-14T15:52:10Z",
+  "total_watches": 1223305,
+  "total_luxury_items": 1695,
   "categories": {
-    "Jewelry": 332,
-    "Handbags": 676,
-    "Watches": 1223980,
-    "Accessories": 12
+    "Watches": 1223305,
+    "Handbags": 1481,
+    "Jewelry": 209,
+    "Accessories": 5
   }
 }
