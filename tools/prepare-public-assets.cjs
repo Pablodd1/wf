@@ -33,9 +33,8 @@ function preparePublicAssets(root) {
   if (fs.existsSync(dataSource)) {
     fs.mkdirSync(dataTarget, { recursive: true });
     const essentialDataFiles = [
-      'catalog_meta.json', 'listings_chunk_0.json', 'listings_chunk_1.json',
-      'dealers_directory.json', 'price_research_data.json', 'evidence_by_ref.json',
-      'broadcasts_map.json'
+      'catalog_meta.json', 'listings_chunk_0.json',
+      'dealers_directory.json', 'price_research_data.json', 'evidence_by_ref.json'
     ];
     for (const df of essentialDataFiles) {
       const srcFile = path.join(dataSource, df);
