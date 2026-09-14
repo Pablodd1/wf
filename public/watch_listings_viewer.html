@@ -1294,18 +1294,34 @@
     let catalogMeta = {};
     let auxiliaryLoaded = false;
 
+    async function fetchCatalogData(relPath) {
+      try {
+        const res = await fetch(relPath);
+        if (res.ok) return await res.json();
+      } catch (e) {
+        console.warn(`Local fetch for ${relPath} notice:`, e);
+      }
+      try {
+        const cleanPath = relPath.startsWith('/') ? relPath.slice(1) : relPath;
+        const cdnUrl = `https://raw.githubusercontent.com/Pablodd1/wf/main/public/${cleanPath}`;
+        const cdnRes = await fetch(cdnUrl);
+        if (cdnRes.ok) return await cdnRes.json();
+      } catch (e) {
+        console.error(`CDN fallback for ${relPath} error:`, e);
+      }
+      return null;
+    }
+
     async function loadCatalog() {
       try {
         // 1. Load catalog metadata (instant 5KB)
-        const metaRes = await fetch('data/catalog_meta.json');
-        catalogMeta = await metaRes.json();
+        catalogMeta = (await fetchCatalogData('data/catalog_meta.json')) || {};
         sortedBrands = catalogMeta.sorted_brands || [];
         initBrandDropdowns();
         initMarquee(catalogMeta.ticker_samples || []);
 
-        // 2. Load top prioritized listings Chunk 0 (top 50,000 items with photos & verified prices)
-        const chunk0Res = await fetch('data/listings_chunk_0.json');
-        const chunk0 = await chunk0Res.json();
+        // 2. Load top prioritized listings Chunk 0 (top 25,000 items with photos & verified prices)
+        const chunk0 = (await fetchCatalogData('data/listings_chunk_0.json')) || [];
         ALL_LISTINGS = chunk0;
         window.ALL_LISTINGS = ALL_LISTINGS;
         chunk0.forEach(it => listingsById.set(it.id, it));
@@ -1339,10 +1355,10 @@
     function preloadAuxiliaryData() {
       if (!auxiliaryPromise) {
         auxiliaryPromise = Promise.all([
-          fetch('data/price_research_data.json').then(r => r.json()),
-          fetch('data/evidence_by_ref.json').then(r => r.json()),
-          fetch('data/dealers_directory.json').then(r => r.json()),
-          fetch('data/broadcasts_map.json').then(r => r.json()).catch(() => ({}))
+          fetchCatalogData('data/price_research_data.json').then(r => r || []),
+          fetchCatalogData('data/evidence_by_ref.json').then(r => r || {}),
+          fetchCatalogData('data/dealers_directory.json').then(r => r || []),
+          fetchCatalogData('data/broadcasts_map.json').then(r => r || {})
         ]).then(([pRes, eRes, dRes, bRes]) => {
           researchList = pRes;
           researchList.forEach(r => { researchIndex[r.normalized_key] = r; });
@@ -1431,16 +1447,17 @@
       if (btn) btn.innerHTML = `<span>⏳ Streaming Chunk ${nextIdx + 1}...</span>`;
 
       try {
-        const res = await fetch(`data/listings_chunk_${nextIdx}.json`);
-        const chunk = await res.json();
-        for (let j = 0; j < chunk.length; j++) {
-          ALL_LISTINGS.push(chunk[j]);
-          listingsById.set(chunk[j].id, chunk[j]);
+        const chunk = await fetchCatalogData(`data/listings_chunk_${nextIdx}.json`);
+        if (chunk && Array.isArray(chunk)) {
+          for (let j = 0; j < chunk.length; j++) {
+            ALL_LISTINGS.push(chunk[j]);
+            listingsById.set(chunk[j].id, chunk[j]);
+          }
+          loadedChunkIndices.add(nextIdx);
+          currentChunkIndex = Math.max(currentChunkIndex, nextIdx);
+          updateCatalogStatusDisplays();
+          renderListings();
         }
-        loadedChunkIndices.add(nextIdx);
-        currentChunkIndex = Math.max(currentChunkIndex, nextIdx);
-        updateCatalogStatusDisplays();
-        renderListings();
       } catch (err) {
         console.error(`Error streaming chunk ${nextIdx}:`, err);
       } finally {
@@ -1484,25 +1501,28 @@
         if (counterEl) counterEl.textContent = `Chunk ${k + 1}/${chunksToScan.length}`;
 
         try {
-          const res = await fetch(`data/listings_chunk_${idx}.json`);
-          const chunk = await res.json();
-          let chunkFoundMatches = false;
-          for (let j = 0; j < chunk.length; j++) {
-            const item = chunk[j];
-            const hay = `${item.brand} ${item.model} ${item.reference} ${item.dial} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
-            if (hay.includes(query)) {
-              chunkFoundMatches = true;
-              newMatchesCount++;
-            }
-          }
-          if (chunkFoundMatches) {
+          const chunk = await fetchCatalogData(`data/listings_chunk_${idx}.json`);
+          if (chunk && Array.isArray(chunk)) {
+            let chunkFoundMatches = false;
             for (let j = 0; j < chunk.length; j++) {
-              ALL_LISTINGS.push(chunk[j]);
-              listingsById.set(chunk[j].id, chunk[j]);
+              const item = chunk[j];
+              const nickStr = (item.nicknames || []).join(' ');
+              const compStr = (item.completeness_tags || []).join(' ');
+              const hay = `${item.brand} ${item.model} ${item.reference} ${item.dial} ${item.category || ''} ${nickStr} ${compStr} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
+              if (hay.includes(query)) {
+                chunkFoundMatches = true;
+                newMatchesCount++;
+              }
             }
-            loadedChunkIndices.add(idx);
-            currentChunkIndex = Math.max(currentChunkIndex, idx);
-            updateCatalogStatusDisplays();
+            if (chunkFoundMatches) {
+              for (let j = 0; j < chunk.length; j++) {
+                ALL_LISTINGS.push(chunk[j]);
+                listingsById.set(chunk[j].id, chunk[j]);
+              }
+              loadedChunkIndices.add(idx);
+              currentChunkIndex = Math.max(currentChunkIndex, idx);
+              updateCatalogStatusDisplays();
+            }
           }
         } catch (e) {
           console.warn(`Search scan error chunk ${idx}:`, e);

@@ -23,9 +23,26 @@ function preparePublicAssets(root) {
     const file = path.join(source, name);
     if (fs.existsSync(file)) fs.copyFileSync(file, path.join(target, name));
   }
-  for (const name of ['images', 'video', 'data']) {
+  for (const name of ['images', 'video']) {
     const directory = path.join(source, name);
     if (fs.existsSync(directory)) fs.cpSync(directory, path.join(target, name), { recursive: true });
+  }
+  // Safely copy essential data files into static distribution output
+  const dataSource = path.join(source, 'data');
+  const dataTarget = path.join(target, 'data');
+  if (fs.existsSync(dataSource)) {
+    fs.mkdirSync(dataTarget, { recursive: true });
+    const essentialDataFiles = [
+      'catalog_meta.json', 'listings_chunk_0.json', 'listings_chunk_1.json',
+      'dealers_directory.json', 'price_research_data.json', 'evidence_by_ref.json',
+      'broadcasts_map.json'
+    ];
+    for (const df of essentialDataFiles) {
+      const srcFile = path.join(dataSource, df);
+      if (fs.existsSync(srcFile)) {
+        fs.copyFileSync(srcFile, path.join(dataTarget, df));
+      }
+    }
   }
   // Retain catalog identity only. sampledListings contains private contacts and
   // raw messages; aggregate prices from this legacy export are not live evidence.
