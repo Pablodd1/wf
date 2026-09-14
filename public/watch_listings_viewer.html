@@ -2131,12 +2131,14 @@
       }
 
       grid.innerHTML = pageItems.map(item => {
-        const isWTB = (item.type === 'wtb' || item.type === 'search');
+        const rawText = (item.raw_message_clean || item.extracted_line || '').toLowerCase();
+        const isBuyerText = /\b(ntq|wtb|ltb|iso|looking to buy|need to order|want to buy)\b/i.test(rawText);
+        const isWTB = (item.type === 'wtb' || item.type === 'search' || isBuyerText);
         const isSale = !isWTB;
         const hasPrice = item.price && item.price > 0 && item.price <= 15000000;
         let formattedPrice = '';
         if (isWTB) {
-          formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : 'WTB';
+          formattedPrice = hasPrice ? ('WTB $' + Math.round(item.price).toLocaleString('en-US')) : '';
         } else {
           formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (item.raw_price_str || 'Price on Request');
         }
@@ -2280,13 +2282,9 @@
                     </div>
                   ` : ''}
 
-                  <!-- Original Raw Message / Structured Child -->
-                  <div class="mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2">
-                    <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] mb-1 pb-1 border-b border-[#E5DACB]">
-                      <span>${isUnbundled ? '⚡ STRUCTURED CHILD LISTING' : '📄 ORIGINAL RAW LISTING (UNTOUCHED)'}</span>
-                      ${isUnbundled ? `<span class="text-[9px] font-mono text-[#78716C]">PARENT #${escapeHtml(item.parent_id || 'BROADCAST')}</span>` : '<span class="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">STANDALONE RAW</span>'}
-                    </div>
-                    <div class="mt-1 max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+                  <!-- Literal Raw Message -->
+                  <div class="mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
+                    <div class="max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
                       ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
                     </div>
                   </div>
@@ -2294,8 +2292,8 @@
 
                 <div class="mt-3 pt-3 border-t border-[#E8DFC9] flex flex-wrap items-center justify-between gap-3">
                   <div class="flex items-baseline gap-3 flex-wrap">
-                    <div class="text-[20px] font-bold font-serif ${isWTB ? 'text-amber-800' : 'text-[#8A5826]'}">${formattedPrice}</div>
-                    <div>${ratingBadgeHtml}</div>
+                    ${formattedPrice ? `<div class="text-[20px] font-bold font-serif ${isWTB ? 'text-amber-800' : 'text-[#8A5826]'}">${formattedPrice}</div>` : (isWTB ? `<div class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Buyer Request</div>` : `<div class="text-[20px] font-bold font-serif text-[#8A5826]">Price on Request</div>`)}
+                    ${!isWTB ? `<div>${ratingBadgeHtml}</div>` : ''}
                     <div class="text-xs text-[#6B7280] w-full mt-0.5">
                       Posted by <a href="#/reference-check/${encodeURIComponent(item.from_name || '')}" class="font-semibold text-[#1C1917] hover:text-[#8A5826]">${item.from_name || 'Verified Dealer'}</a> · ${dealerRatingText}
                     </div>
@@ -2369,14 +2367,8 @@
               ` : ''}
             </div>
 
-            <!-- 3. Original Raw Message / Structured Child -->
+            <!-- 3. Literal Raw Message -->
             <div class="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-              <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] mb-1.5 pb-1 border-b border-[#E5DACB]">
-                <div class="flex items-center gap-1.5">
-                  <span>${isUnbundled ? '⚡ STRUCTURED CHILD LISTING' : '📄 ORIGINAL RAW LISTING (UNTOUCHED)'}</span>
-                </div>
-                ${isUnbundled ? `<span class="text-[9px] font-mono text-[#78716C]">PARENT #${escapeHtml(item.parent_id || 'BROADCAST')}</span>` : '<span class="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">STANDALONE RAW</span>'}
-              </div>
               <div class="max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
                 ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
               </div>
@@ -2385,12 +2377,14 @@
             <!-- 4. Price & Dynamic Market Rating Badge -->
             <div class="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
               <div>
-                <div class="text-[22px] font-bold font-serif ${isWTB ? 'text-amber-800' : 'text-[#8A5826]'}">
-                  ${formattedPrice}
-                </div>
+                ${formattedPrice ? `
+                  <div class="text-[22px] font-bold font-serif ${isWTB ? 'text-amber-800' : 'text-[#8A5826]'}">
+                    ${formattedPrice}
+                  </div>
+                ` : (isWTB ? `<div class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Buyer Request</div>` : `<div class="text-[20px] font-bold font-serif text-[#8A5826]">Price on Request</div>`)}
               </div>
               <div class="shrink-0">
-                ${ratingBadgeHtml}
+                ${!isWTB ? ratingBadgeHtml : ''}
               </div>
             </div>
 
