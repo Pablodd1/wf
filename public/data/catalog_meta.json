@@ -557,12 +557,12 @@
     }
   ],
   "last_updated": "2026-09-11T21:08:00Z",
-  "total_watches": 1218324,
-  "total_luxury_items": 6676,
+  "total_watches": 1223980,
+  "total_luxury_items": 1020,
   "categories": {
-    "Watches": 1218324,
-    "Accessories": 4489,
-    "Jewelry": 1637,
-    "Handbags": 550
+    "Jewelry": 332,
+    "Handbags": 676,
+    "Watches": 1223980,
+    "Accessories": 12
   }
 }

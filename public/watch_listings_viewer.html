@@ -524,6 +524,17 @@
           <span>+</span>
           <span>Post It</span>
         </button>
+        <a
+          id="navHireFi"
+          href="https://luxfi.ai/#add-fi"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="pb-1 border-b-2 border-transparent text-[#78716C] hover:text-[#1C1917] transition-all flex items-center gap-1"
+          title="Let Fi search the world for rare luxury objects"
+        >
+          <span>HIRE FI</span>
+          <span class="text-[10px] text-[#9A7127]">↗</span>
+        </a>
         <button
           id="navDealers"
           onclick="switchMainView('dealers')"
@@ -603,20 +614,17 @@
         <div class="flex items-center gap-3">
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
           <div class="flex flex-col gap-1">
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span class="font-bold text-[#1C1917]"><strong id="totalWatchesDisplay" class="text-[#1C1917]">1,218,324</strong> Watches</span>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span class="font-bold text-[#1C1917] text-sm"><strong id="totalWatchesDisplay" class="text-[#1C1917]">1,223,980</strong> Watches</span>
               <span class="text-[#8A5826] font-mono">·</span>
-              <span class="font-bold text-[#8A5826]"><strong id="totalLuxuryDisplay" class="text-[#8A5826]">6,676</strong> Luxury Items</span>
-              <span class="text-[#8A5826] font-mono">·</span>
-              <span class="font-bold text-[#1C1917]"><strong id="catalogTotalDisplay" class="text-[#1C1917]">1,225,000</strong> Total Verified</span>
+              <span class="font-bold text-[#8A5826] text-sm"><strong id="totalLuxuryDisplay" class="text-[#8A5826]">1,020</strong> Luxury Items (Non-Watches)</span>
             </div>
             <div class="flex items-center flex-wrap gap-2 text-[11px] text-[#6B7280]">
               <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>Live Chats &amp; OD Synced</span>
               </span>
-              <span>·</span>
-              <span><strong id="catalogLoadedDisplay" class="text-[#1C1917]">25,000</strong> on floor (<strong id="catalogPendingDisplay" class="text-[#9E6B38]">1,200,000 in 48 pending chunks</strong>)</span>
+              <span class="text-[11px] text-[#78716C] font-mono">Real-time trading buffer</span>
             </div>
           </div>
         </div>
@@ -812,23 +820,19 @@
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Watches" onchange="toggleCategoryFilter('Watches')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Watches (1,218,324)</span>
+                  <span>Watches (1,223,980)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Handbags" onchange="toggleCategoryFilter('Handbags')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Handbags (550)</span>
+                  <span>Handbags (676)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Jewelry" onchange="toggleCategoryFilter('Jewelry')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Jewelry (1,637)</span>
+                  <span>Jewelry (332)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Accessories" onchange="toggleCategoryFilter('Accessories')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Accessories (4,489)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="cat-Other luxury" onchange="toggleCategoryFilter('Other luxury')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Other luxury</span>
+                  <span>Accessories (12)</span>
                 </label>
               </div>
             </div>
@@ -838,16 +842,16 @@
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-2">Listing type</label>
               <div class="space-y-1.5 text-xs text-[#1C1917]">
                 <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="type-all" checked onchange="toggleListingType('all')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
+                  <input type="checkbox" id="type-all" onchange="toggleListingType('all')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
                   <span>All activity</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="type-sale" onchange="toggleListingType('sale')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>For sale</span>
+                  <input type="checkbox" id="type-sale" checked onchange="toggleListingType('sale')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
+                  <span>For sale (WTS)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="type-wtb" onchange="toggleListingType('wtb')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Want to buy</span>
+                  <span>Want to buy (WTB)</span>
                 </label>
               </div>
             </div>
@@ -1577,26 +1581,14 @@
     }
 
     function updateCatalogStatusDisplays() {
-      const totalDisplay = document.getElementById('catalogTotalDisplay');
-      const loadedDisplay = document.getElementById('catalogLoadedDisplay');
-      const pendingDisplay = document.getElementById('catalogPendingDisplay');
-      const sub = document.getElementById('headerSubtitleCount');
-      const total = ALL_LISTINGS.length;
-      const pending = Math.max(0, totalCatalogListings - total);
-
       const watchesDisplay = document.getElementById('totalWatchesDisplay');
       const luxuryDisplay = document.getElementById('totalLuxuryDisplay');
-      if (watchesDisplay) watchesDisplay.textContent = (catalogMeta.total_watches || 1218324).toLocaleString('en-US');
-      if (luxuryDisplay) luxuryDisplay.textContent = (catalogMeta.total_luxury_items || 6676).toLocaleString('en-US');
-      if (totalDisplay) totalDisplay.textContent = totalCatalogListings.toLocaleString('en-US');
-      if (loadedDisplay) loadedDisplay.textContent = total.toLocaleString('en-US');
-      if (pendingDisplay) pendingDisplay.textContent = `${pending.toLocaleString('en-US')} in ${Math.max(0, totalCatalogChunks - loadedChunkIndices.size)} pending chunks`;
+      if (watchesDisplay) watchesDisplay.textContent = (catalogMeta.total_watches || 1223980).toLocaleString('en-US');
+      if (luxuryDisplay) luxuryDisplay.textContent = (catalogMeta.total_luxury_items || 1020).toLocaleString('en-US');
+      
+      const sub = document.getElementById('headerSubtitleCount');
       if (sub) {
-        sub.innerHTML = `Showing <strong class="text-[#1C1917]">${total.toLocaleString('en-US')}</strong> active listings on floor of <strong class="text-[#1C1917]">${totalCatalogListings.toLocaleString('en-US')}</strong> catalog total (${pending.toLocaleString('en-US')} pending in chunks) · confirm availability`;
-      }
-      const pageInfo = document.getElementById('pageInfoText');
-      if (pageInfo) {
-        pageInfo.innerHTML = `Showing <strong class="text-[#1C1917]">${Math.min(pageSize, total)}</strong> on this page of <strong class="text-[#1C1917]">${total.toLocaleString()}</strong> listings <span id="catalogSyncStatus" class="ml-2 text-[10px] text-[#9A7127]">(${total < totalCatalogListings ? `${total.toLocaleString()} / 1.225M active` : '100% Synced'})</span>`;
+        sub.innerHTML = 'Verified Luxury Trading Floor · Direct Dealer Inquiries';
       }
     }
 
@@ -1614,7 +1606,7 @@
     let viewMode = 'grid'; // 'grid' or 'list'
     let currentOrder = 'source-images-first';
     let selectedCategories = new Set(['all']);
-    let selectedListingTypes = new Set(['all']);
+    let selectedListingTypes = new Set(['sale']);
     let selectedBrand = 'all';
     let selectedLocations = new Set(['all']);
     let evidenceImagesOnly = false;
@@ -1714,6 +1706,13 @@
       });
 
       if (view === 'trading-floor') {
+        selectedListingTypes = new Set(['sale']);
+        const rSale = document.getElementById('type-sale');
+        if (rSale) rSale.checked = true;
+        const rAll = document.getElementById('type-all');
+        if (rAll) rAll.checked = false;
+        const rWtb = document.getElementById('type-wtb');
+        if (rWtb) rWtb.checked = false;
         vTrading.classList.remove('hidden');
         vResearch.classList.add('hidden');
         vDealers.classList.add('hidden');
@@ -2039,26 +2038,25 @@
         if (a.is_live_post && !b.is_live_post) return -1;
         if (!a.is_live_post && b.is_live_post) return 1;
 
-        // Strict Order:
-        // Priority 1: Listings with authentic images (newest date first, then highest price)
-        // Priority 2: Standalone listings without images (newest date first, then highest price)
-        // Priority 3: Unbundled child listings without images (newest date first, then highest price)
-        const hasImgA = Boolean(a.image_url && String(a.image_url).trim() !== '');
-        const hasImgB = Boolean(b.image_url && String(b.image_url).trim() !== '');
+        // Mandatory Rule: Singles FIRST, unbundled child listings strictly AT THE VERY END
         const unbundledA = Boolean(a.is_unbundled);
         const unbundledB = Boolean(b.is_unbundled);
 
-        const groupA = hasImgA ? 1 : (!unbundledA ? 2 : 3);
-        const groupB = hasImgB ? 1 : (!unbundledB ? 2 : 3);
+        if (!unbundledA && unbundledB) return -1;
+        if (unbundledA && !unbundledB) return 1;
 
-        if (groupA !== groupB) return groupA - groupB;
-
-        // Within same priority group: Sort by Date descending (newest post first)
+        // Within same tier (singles or unbundled): Most recent date first
         const dateA = parseItemDateTimestamp(a.created_on);
         const dateB = parseItemDateTimestamp(b.created_on);
         if (dateB !== dateA) return dateB - dateA;
 
-        // Secondary within same date: Higher Price first
+        // Tertiary: Listings with authentic images first
+        const hasImgA = Boolean(a.image_url && String(a.image_url).trim() !== '');
+        const hasImgB = Boolean(b.image_url && String(b.image_url).trim() !== '');
+        if (hasImgA && !hasImgB) return -1;
+        if (!hasImgA && hasImgB) return 1;
+
+        // Quaternary: Higher Price first
         return (b.price_usd || b.price || 0) - (a.price_usd || a.price || 0);
       });
     }
@@ -2217,6 +2215,7 @@
         }
         const fullBroadcast = (item.parent_id && broadcastsMap[item.parent_id]) || broadcastsMap[item.id] || item.extracted_line || 'No raw source broadcast attached.';
         const cleanRef = item.reference && item.reference !== 'Uncataloged' ? item.reference : '';
+        const isUnbundled = Boolean(item.is_unbundled);
 
         // Dealer review lookup
         const dKey = (item.from_name || '').trim().toLowerCase();
@@ -2281,21 +2280,16 @@
                     </div>
                   ` : ''}
 
-                  <!-- Collapsible Raw Message -->
-                  <details class="group mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2">
-                    <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none">
-                      <div class="flex items-center gap-1.5">
-                        <span class="transition-transform group-open:rotate-90">▶</span>
-                        <span>Original raw message</span>
-                      </div>
-                      <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case">
-                        View in modal ↗
-                      </button>
-                    </summary>
-                    <div class="mt-2 max-h-48 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
-                      ${escapeHtml(fullBroadcast)}
+                  <!-- Original Raw Message / Structured Child -->
+                  <div class="mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2">
+                    <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] mb-1 pb-1 border-b border-[#E5DACB]">
+                      <span>${isUnbundled ? '⚡ STRUCTURED CHILD LISTING' : '📄 ORIGINAL RAW LISTING (UNTOUCHED)'}</span>
+                      ${isUnbundled ? `<span class="text-[9px] font-mono text-[#78716C]">PARENT #${escapeHtml(item.parent_id || 'BROADCAST')}</span>` : '<span class="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">STANDALONE RAW</span>'}
                     </div>
-                  </details>
+                    <div class="mt-1 max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+                      ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
+                    </div>
+                  </div>
                 </div>
 
                 <div class="mt-3 pt-3 border-t border-[#E8DFC9] flex flex-wrap items-center justify-between gap-3">
@@ -2375,21 +2369,18 @@
               ` : ''}
             </div>
 
-            <!-- 3. Collapsible Original Raw Message -->
-            <details class="group mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-              <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+            <!-- 3. Original Raw Message / Structured Child -->
+            <div class="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
+              <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] mb-1.5 pb-1 border-b border-[#E5DACB]">
                 <div class="flex items-center gap-1.5">
-                  <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
-                  <span>Original raw message</span>
+                  <span>${isUnbundled ? '⚡ STRUCTURED CHILD LISTING' : '📄 ORIGINAL RAW LISTING (UNTOUCHED)'}</span>
                 </div>
-                <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case">
-                  View in modal ↗
-                </button>
-              </summary>
-              <div class="mt-2.5 max-h-72 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
-                ${escapeHtml(fullBroadcast)}
+                ${isUnbundled ? `<span class="text-[9px] font-mono text-[#78716C]">PARENT #${escapeHtml(item.parent_id || 'BROADCAST')}</span>` : '<span class="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">STANDALONE RAW</span>'}
               </div>
-            </details>
+              <div class="max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+                ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
+              </div>
+            </div>
 
             <!-- 4. Price & Dynamic Market Rating Badge -->
             <div class="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
