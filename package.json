@@ -6,7 +6,7 @@
   "scripts": {
     "release:qnsa-vacheron-overseas": "node tools/intake/release-qnsa-vacheron-overseas.cjs",
     "dev": "vite",
-    "build": "node tools/generate-build-info.cjs && node tools/verify-api-syntax.cjs && node tools/verify-frontend-api-routes.cjs && tsc -b && vite build",
+    "build": "node --max-old-space-size=4096 tools/generate-build-info.cjs && node --max-old-space-size=4096 tools/verify-api-syntax.cjs && node --max-old-space-size=4096 tools/verify-frontend-api-routes.cjs && tsc -b && vite build && node tools/cleanup-build-artifacts.cjs",
     "build:disposable": "node tools/verify-no-production-references.cjs && npm run build",
     "lint": "eslint .",
     "preview": "vite preview",

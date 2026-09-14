@@ -7,16 +7,33 @@
       "maxDuration": 300
     },
     "api/clean-analyze.js": {
-      "maxDuration": 120
+      "maxDuration": 120,
+      "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
     },
     "api/shadow-normalize.js": {
       "maxDuration": 120
     },
-    "api/*.js": {
+    "api/ingest.js": {
       "maxDuration": 60,
       "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
     },
-    "api/**/*.js": {
+    "api/model-stats.js": {
+      "maxDuration": 60,
+      "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
+    },
+    "api/price-research.js": {
+      "maxDuration": 60,
+      "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
+    },
+    "api/reprocess.js": {
+      "maxDuration": 60,
+      "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
+    },
+    "api/build-missing-catalog.js": {
+      "maxDuration": 60,
+      "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
+    },
+    "api/debug-catalog.js": {
       "maxDuration": 60,
       "includeFiles": "public/{catalog.json,catalog-identities.json,catalog-source-v1.json}"
     }

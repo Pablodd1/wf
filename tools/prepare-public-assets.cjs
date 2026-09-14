@@ -7,7 +7,7 @@ const path = require('node:path');
 const FILES = [
   'watch-silhouette.svg', 'icon-192.png', 'favicon-32.png', 'favicon.ico',
   'apple-touch-icon.png', 'icon-512.png', 'grid-pattern.svg', 'pp-watermark.svg',
-  'manifest.webmanifest', 'extract.html', 'watch_listings_viewer.html',
+  'manifest.webmanifest', 'extract.html', 'watch_listings_viewer.html', 'logo_cl_gold.png',
   'catalog.json', 'catalog-source-v1.json', 'master_catalog.json',
   'disambiguation_map.json', 'reference_images.json', 'parsedWatches.schema.json',
 ];
