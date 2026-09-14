@@ -556,17 +556,56 @@
           </button>
         </div>
 
-        <div class="relative hidden sm:block">
+        <div class="relative">
           <button
+            id="langDropdownBtn"
             type="button"
-            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-[#D7CCBC] bg-[#FAF6F0] text-[11px] font-semibold text-[#1C1917]"
+            onclick="toggleLanguageDropdown()"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#D7CCBC] bg-[#FAF6F0] hover:bg-[#F6F0E7] text-[11px] font-bold text-[#1C1917] transition shadow-2xs cursor-pointer"
+            title="Translate interface language"
           >
-            <span>文A</span>
-            <span>EN</span>
-            <span class="text-[9px]">▾</span>
+            <span class="text-[#8A5826] font-mono">文A</span>
+            <span id="currentLangLabel">EN</span>
+            <span class="text-[9px] text-[#78716C]">▾</span>
           </button>
+          <div
+            id="langDropdownMenu"
+            class="hidden absolute right-0 mt-1.5 w-36 rounded-xl border border-[#E5DACB] bg-[#FAF6F0] shadow-xl py-1 z-50 text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+          >
+            <button onclick="setLanguage('en')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
+              <span>English</span>
+              <span class="text-[10px] text-[#8A5826] font-mono">EN</span>
+            </button>
+            <button onclick="setLanguage('es')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
+              <span>Español</span>
+              <span class="text-[10px] text-[#8A5826] font-mono">ES</span>
+            </button>
+            <button onclick="setLanguage('zh')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
+              <span>繁體中文</span>
+              <span class="text-[10px] text-[#8A5826] font-mono">ZH</span>
+            </button>
+            <button onclick="setLanguage('ja')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
+              <span>日本語</span>
+              <span class="text-[10px] text-[#8A5826] font-mono">JA</span>
+            </button>
+            <button onclick="setLanguage('ar')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
+              <span>العربية</span>
+              <span class="text-[10px] text-[#8A5826] font-mono">AR</span>
+            </button>
+            <button onclick="setLanguage('fr')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
+              <span>Français</span>
+              <span class="text-[10px] text-[#8A5826] font-mono">FR</span>
+            </button>
+          </div>
         </div>
       </div>
+    </div>
+    <!-- Mobile Secondary Navigation Bar (< md) -->
+    <div class="md:hidden border-t border-[#E5DACB]/70 pt-2.5 pb-1 mt-2 flex items-center justify-around text-[11px] font-bold tracking-wider uppercase text-[#78716C]">
+      <button id="mobNavTrading" onclick="switchMainView('trading-floor')" class="text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition">Trading Floor</button>
+      <button id="mobNavResearch" onclick="switchMainView('price-research')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Price Research</button>
+      <button id="mobNavDealers" onclick="switchMainView('dealers')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Reference Check</button>
+      <button onclick="handleNavPostItClick()" class="text-[#9A7127] font-bold py-1 flex items-center gap-0.5">+ Post It</button>
     </div>
   </header>
 
@@ -627,24 +666,6 @@
               <span class="text-[11px] text-[#78716C] font-mono">Real-time trading buffer</span>
             </div>
           </div>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button
-            id="btnStreamNextChunk"
-            onclick="loadNextChunk()"
-            class="px-3 py-1.5 rounded-lg border border-[#8A5826] bg-[#F6F0E7] hover:bg-[#EFE5D8] text-[#653E23] text-[11px] font-bold uppercase tracking-wider transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-            title="Load next 25,000 pending listings into floor buffer"
-          >
-            <span>⚡ Stream Next Chunk (+25,000)</span>
-          </button>
-          <button
-            id="btnToggleAutoStream"
-            onclick="toggleAutoStream()"
-            class="px-3 py-1.5 rounded-lg border border-[#D5C7B2] bg-white hover:bg-[#FAF6F0] text-[#78716C] text-[11px] font-medium transition cursor-pointer"
-            title="Auto-stream chunks into memory in background"
-          >
-            Auto-Stream Chunks
-          </button>
         </div>
       </div>
 
@@ -813,12 +834,12 @@
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-2">Category</label>
               <div class="space-y-1.5 text-xs text-[#1C1917]">
                 <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="cat-all" checked onchange="toggleCategoryFilter('all')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span class="font-bold">All inventory (1,225,000)</span>
+                  <input type="checkbox" id="cat-all" onchange="toggleCategoryFilter('all')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
+                  <span>All inventory (1,225,000)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="cat-Watches" onchange="toggleCategoryFilter('Watches')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Watches (1,223,305)</span>
+                  <input type="checkbox" id="cat-Watches" checked onchange="toggleCategoryFilter('Watches')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
+                  <span class="font-bold">Watches (1,223,305)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Handbags" onchange="toggleCategoryFilter('Handbags')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
@@ -1113,24 +1134,24 @@
   </div>
 
   <!-- CHECK AVAILABILITY MODAL (TWO COLUMN SLIDE-OVER DRAWER) -->
-  <div id="availabilityModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-[#FAF6F0] rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-[#E5DACB] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+  <div id="availabilityModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-[#FAF6F0] rounded-2xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-[#E5DACB] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
       <!-- Header with Close -->
-      <div class="px-6 py-3.5 border-b border-[#E5DACB] flex items-center justify-between bg-[#F6F0E7]">
+      <div class="px-4 sm:px-6 py-3.5 border-b border-[#E5DACB] flex items-center justify-between bg-[#F6F0E7]">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
           <span class="text-[11px] font-bold uppercase tracking-wider text-[#8A5826]">Curated Luxury · Verified Inquiry</span>
         </div>
-        <button onclick="closeAvailabilityModal()" class="text-[#8A5826] hover:text-[#1C1917] font-bold text-xl leading-none p-1">
+        <button onclick="closeAvailabilityModal()" class="text-[#8A5826] hover:text-[#1C1917] font-bold text-2xl leading-none p-2 cursor-pointer">
           ×
         </button>
       </div>
 
       <!-- Two-Column Body -->
-      <div class="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6 text-xs flex-1">
+      <div class="p-4 sm:p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 text-xs flex-1">
         <!-- Left Column: High-Res Image -->
         <div class="flex flex-col">
-          <div id="availImageContainer" class="w-full h-80 md:h-full min-h-[320px] rounded-xl bg-white border border-[#E5DACB] overflow-hidden flex items-center justify-center">
+          <div id="availImageContainer" class="w-full h-64 sm:h-80 md:h-full min-h-[240px] sm:min-h-[320px] rounded-xl bg-white border border-[#E5DACB] overflow-hidden flex items-center justify-center">
             <img id="availImage" src="" alt="Watch" class="w-full h-full object-contain p-2" />
           </div>
         </div>
@@ -1182,7 +1203,7 @@
               id="availWhatsAppBtn"
               href="#"
               target="_blank"
-              class="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#8A5826] hover:bg-[#78350F] py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow transition"
+              class="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#8A5826] hover:bg-[#78350F] py-3.5 min-h-[48px] text-xs font-bold uppercase tracking-wider text-white shadow-md transition cursor-pointer"
             >
               <span>Connect on WhatsApp</span>
               <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
@@ -1652,7 +1673,7 @@
     let currentView = 'trading-floor';
     let viewMode = 'grid'; // 'grid' or 'list'
     let currentOrder = 'source-images-first';
-    let selectedCategories = new Set(['all']);
+    let selectedCategories = new Set(['Watches']);
     let selectedListingTypes = new Set(['sale']);
     let selectedBrand = 'all';
     let selectedLocations = new Set(['all']);
@@ -1748,8 +1769,15 @@
       const navResearch = document.getElementById('navPriceResearch');
       const navDealers = document.getElementById('navDealers');
 
+      const mobTrading = document.getElementById('mobNavTrading');
+      const mobResearch = document.getElementById('mobNavResearch');
+      const mobDealers = document.getElementById('mobNavDealers');
+
       [navTrading, navResearch, navDealers].forEach(b => {
-        b.className = "pb-1 border-b-2 border-transparent text-[#78716C] hover:text-[#1C1917] transition-all";
+        if (b) b.className = "pb-1 border-b-2 border-transparent text-[#78716C] hover:text-[#1C1917] transition-all";
+      });
+      [mobTrading, mobResearch, mobDealers].forEach(b => {
+        if (b) b.className = "hover:text-[#1C1917] py-1 border-b-2 border-transparent transition";
       });
 
       if (view === 'trading-floor') {
@@ -1763,21 +1791,24 @@
         vTrading.classList.remove('hidden');
         vResearch.classList.add('hidden');
         vDealers.classList.add('hidden');
-        navTrading.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
+        if (navTrading) navTrading.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
+        if (mobTrading) mobTrading.className = "text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition";
         if (syncHash && window.location.hash !== '#/trading') window.location.hash = '#/trading';
         renderListings();
       } else if (view === 'price-research') {
         vTrading.classList.add('hidden');
         vResearch.classList.remove('hidden');
         vDealers.classList.add('hidden');
-        navResearch.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
+        if (navResearch) navResearch.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
+        if (mobResearch) mobResearch.className = "text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition";
         if (syncHash && window.location.hash !== '#/price-research') window.location.hash = '#/price-research';
         renderBrandCards();
       } else if (view === 'dealers') {
         vTrading.classList.add('hidden');
         vResearch.classList.add('hidden');
         vDealers.classList.remove('hidden');
-        navDealers.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
+        if (navDealers) navDealers.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
+        if (mobDealers) mobDealers.className = "text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition";
         if (syncHash && window.location.hash !== '#/dealers') window.location.hash = '#/dealers';
         renderDealersDirectory();
       }
@@ -1859,6 +1890,7 @@
         }
       }
       currentPage = 1;
+      updateMobileFilterSummary();
       renderListings();
     }
 
@@ -1889,6 +1921,7 @@
     function handleBrandSelect() {
       selectedBrand = document.getElementById('brandSelect').value;
       currentPage = 1;
+      updateMobileFilterSummary();
       renderListings();
     }
 
@@ -1947,9 +1980,19 @@
       renderListings();
     }
 
+    function updateMobileFilterSummary() {
+      const summaryEl = document.getElementById('mobileFilterSummary');
+      if (!summaryEl) return;
+      let catText = 'Watches';
+      if (selectedCategories.has('all')) catText = 'All Inventory';
+      else if (selectedCategories.size > 0) catText = Array.from(selectedCategories).join(', ');
+      let brandText = selectedBrand === 'all' ? 'All Brands' : selectedBrand;
+      summaryEl.textContent = `${catText} · ${brandText}`;
+    }
+
     function resetAllFilters() {
-      selectedCategories = new Set(['all']);
-      selectedListingTypes = new Set(['all']);
+      selectedCategories = new Set(['Watches']);
+      selectedListingTypes = new Set(['sale']);
       selectedBrand = 'all';
       selectedLocations = new Set(['all']);
       evidenceImagesOnly = false;
@@ -1962,13 +2005,14 @@
       document.getElementById('searchInput').value = '';
       document.getElementById('orderSelect').value = 'source-images-first';
       document.getElementById('brandSelect').value = 'all';
-      document.getElementById('cat-all').checked = true;
-      ['Watches', 'Handbags', 'Jewelry', 'Accessories', 'Other luxury'].forEach(c => {
+      document.getElementById('cat-all').checked = false;
+      document.getElementById('cat-Watches').checked = true;
+      ['Handbags', 'Jewelry', 'Accessories', 'Other luxury'].forEach(c => {
         const el = document.getElementById(`cat-${c}`);
         if (el) el.checked = false;
       });
-      document.getElementById('type-all').checked = true;
-      document.getElementById('type-sale').checked = false;
+      document.getElementById('type-all').checked = false;
+      document.getElementById('type-sale').checked = true;
       document.getElementById('type-wtb').checked = false;
       document.getElementById('loc-all').checked = true;
       ['Africa', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'].forEach(l => {
@@ -1980,6 +2024,7 @@
       const dedupEl = document.getElementById('dedup-hide-rebroadcasts');
       if (dedupEl) dedupEl.checked = true;
 
+      updateMobileFilterSummary();
       renderListings();
     }
 
@@ -2177,6 +2222,8 @@
         return;
       }
 
+      const t = UI_TRANSLATIONS[currentAppLang] || UI_TRANSLATIONS.en;
+
       grid.innerHTML = pageItems.map(item => {
         const rawText = (item.raw_message_clean || item.extracted_line || '').toLowerCase();
         const isBuyerText = /\b(ntq|wtb|ltb|iso|looking to buy|need to order|want to buy)\b/i.test(rawText);
@@ -2187,7 +2234,7 @@
         if (isWTB) {
           formattedPrice = hasPrice ? ('WTB $' + Math.round(item.price).toLocaleString('en-US')) : '';
         } else {
-          formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (item.raw_price_str || 'Price on Request');
+          formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (item.raw_price_str || t.priceOnRequest);
         }
         const normKey = (item.reference || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         const cleanKey = normKey;
@@ -2355,13 +2402,13 @@
         }
 
         return `
-          <article data-listing-id="${item.id}" class="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <article data-listing-id="${item.id}" class="flex flex-col rounded-xl border border-[#EBE3D5] bg-[#FAF6F0] p-3 sm:p-4 shadow-xs sm:shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
             <!-- 1. Top Image -->
-            <button type="button" onclick="openAvailabilityModal('${item.id}')" class="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
+            <button type="button" onclick="openAvailabilityModal('${item.id}')" class="block w-full overflow-hidden rounded-lg bg-stone-100 text-left cursor-pointer">
               ${item.image_url ? `
-                <img alt="${item.brand} ${item.model}" class="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]" loading="lazy" src="${item.image_url}" onerror="handleListingImageError(this)"/>
+                <img alt="${item.brand} ${item.model}" class="h-[260px] sm:h-[320px] md:h-[340px] w-full object-cover object-center transition hover:scale-[1.02]" loading="lazy" src="${item.image_url}" onerror="handleListingImageError(this)"/>
               ` : `
-                <div class="h-[340px] w-full flex flex-col items-center justify-center p-6 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
+                <div class="h-[260px] sm:h-[320px] md:h-[340px] w-full flex flex-col items-center justify-center p-6 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
                   <span class="text-4xl mb-2">${(item.category === 'Handbags') ? '👜' : ((item.category === 'Jewelry') ? '💍' : ((item.category === 'Accessories') ? '🕶️' : '⌚'))}</span>
                   <span class="text-lg">${item.brand}</span>
                   <span class="text-xs font-mono text-[#6B7280] mt-1">${cleanRef || item.category || 'Luxury Piece'}</span>
@@ -2392,11 +2439,11 @@
                 </div>
                 ${isWTB ? `
                   <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
-                    WTB / BUYER REQUEST
+                    ${t.wtbBuyerReq}
                   </span>
                 ` : `
                   <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
-                    FOR SALE
+                    ${t.forSale}
                   </span>
                 `}
               </div>
@@ -2428,7 +2475,7 @@
                   <div class="text-[22px] font-bold font-serif ${isWTB ? 'text-amber-800' : 'text-[#8A5826]'}">
                     ${formattedPrice}
                   </div>
-                ` : (isWTB ? `<div class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Buyer Request</div>` : `<div class="text-[20px] font-bold font-serif text-[#8A5826]">Price on Request</div>`)}
+                ` : (isWTB ? `<div class="text-xs font-semibold text-amber-800 uppercase tracking-wider">${t.buyerRequest}</div>` : `<div class="text-[20px] font-bold font-serif text-[#8A5826]">${t.priceOnRequest}</div>`)}
               </div>
               <div class="shrink-0">
                 ${!isWTB ? ratingBadgeHtml : ''}
@@ -2448,9 +2495,9 @@
 
             <!-- 6. Dealer Attribution & Rating Badge -->
             <div class="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
-              <div class="text-[#6B7280]">Posted by</div>
+              <div class="text-[#6B7280]">${t.postedBy}</div>
               <a class="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]" href="#/reference-check/${encodeURIComponent(item.from_name || '')}">
-                ${item.from_name || 'Verified Dealer'}
+                ${item.from_name || t.verifiedDealer}
               </a>
               <div class="mt-1">
                 ${dealerRatingText}
@@ -2462,9 +2509,9 @@
               <button
                 type="button"
                 onclick="openAvailabilityModal('${item.id}')"
-                class="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2.5 text-[11px] font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
+                class="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-3 text-[11px] font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8] min-h-[44px] cursor-pointer shadow-2xs"
               >
-                ${isWTB ? 'Connect with Buyer' : 'Check availability'}
+                ${isWTB ? t.connectBuyer : t.checkAvailability}
               </button>
             </div>
           </article>
@@ -3120,13 +3167,14 @@
       const item = listingsById.get(id) || ALL_LISTINGS.find(i => i.id === id);
       if (!item) return;
 
+      const t = UI_TRANSLATIONS[currentAppLang] || UI_TRANSLATIONS.en;
       const isSale = item.type !== 'wtb' && item.type !== 'search';
       const hasPrice = item.price && item.price > 0;
-      const formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (isSale ? 'Price on Request' : 'WTB');
+      const formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (isSale ? t.priceOnRequest : 'WTB');
       const cleanRef = item.reference && item.reference !== 'Uncataloged' ? item.reference : '';
       const fullBroadcast = (item.parent_id && broadcastsMap[item.parent_id]) || broadcastsMap[item.id] || item.extracted_line || 'No raw source broadcast attached.';
 
-      document.getElementById('availCategory').textContent = `${item.category?.toUpperCase() || 'WATCH'} · ${isSale ? 'FOR SALE' : 'WANT TO BUY'}`;
+      document.getElementById('availCategory').textContent = `${item.category?.toUpperCase() || 'WATCH'} · ${isSale ? t.forSale : t.wtbBuyerReq}`;
       document.getElementById('availTitle').textContent = `${item.brand} ${item.model} ${cleanRef}`;
       document.getElementById('availPrice').textContent = formattedPrice;
 
@@ -3158,42 +3206,46 @@
       if (hasPrice && mBenchmark > 0) {
         const diff = Math.round(((item.price - mBenchmark) / mBenchmark) * 100);
         if (diff <= -5) {
-          ratingText.innerHTML = `<span class="text-emerald-700 font-bold">🟢 Below Market (${diff}%)</span> · Benchmark Average: $${Math.round(mBenchmark).toLocaleString('en-US')}`;
+          ratingText.innerHTML = `<span class="text-emerald-700 font-bold">🟢 ${t.belowMarket} (${diff}%)</span> · Benchmark Average: $${Math.round(mBenchmark).toLocaleString('en-US')}`;
         } else if (diff >= 5) {
-          ratingText.innerHTML = `<span class="text-amber-700 font-bold">🟠 Above Market (+${diff}%)</span> · Benchmark Average: $${Math.round(mBenchmark).toLocaleString('en-US')}`;
+          ratingText.innerHTML = `<span class="text-amber-700 font-bold">🟠 ${t.aboveMarket} (+${diff}%)</span> · Benchmark Average: $${Math.round(mBenchmark).toLocaleString('en-US')}`;
         } else {
           const sign = diff > 0 ? `+${diff}%` : (diff < 0 ? `${diff}%` : '0%');
-          ratingText.innerHTML = `<span class="text-sky-700 font-bold">🔵 Fair Market Value (${sign})</span> · Benchmark Average: $${Math.round(mBenchmark).toLocaleString('en-US')}`;
+          ratingText.innerHTML = `<span class="text-sky-700 font-bold">🔵 ${t.fairMarket} (${sign})</span> · Benchmark Average: $${Math.round(mBenchmark).toLocaleString('en-US')}`;
         }
       } else if (mBenchmark > 0) {
         ratingText.innerHTML = `<span>Market Benchmark Average: $${Math.round(mBenchmark).toLocaleString('en-US')}</span>`;
       } else if (!isSale) {
-        ratingText.innerHTML = `<span class="text-amber-700 font-medium">Buyer Search Request</span>`;
+        ratingText.innerHTML = `<span class="text-amber-700 font-medium">${t.buyerRequest}</span>`;
       } else {
-        ratingText.innerHTML = `<span>Market Verified · Reference cohort benchmark compiling</span>`;
+        ratingText.innerHTML = `<span>${t.marketVerified} · Reference cohort benchmark compiling</span>`;
       }
 
       // Dealer Meta
-      document.getElementById('availDealerName').textContent = item.from_name || 'Verified Dealer';
+      document.getElementById('availDealerName').textContent = item.from_name || t.verifiedDealer;
       document.getElementById('availDealerMeta').textContent = `${item.dealer_rating || 'Not rated'} · ${item.country || 'Location not published'}`;
 
       // Inquiry Text Assistant
       const cleanPhone = (item.from_number || '').replace(/\D/g, '');
-      const defaultInquiry = `Hi ${item.from_name || 'there'}, I found your listing on Curated Luxury: ${item.brand} ${item.model} ${cleanRef} listed at ${formattedPrice}. Is this piece currently available?`;
+      const defaultInquiry = `${t.inquiryGreeting}: ${item.brand} ${item.model} ${cleanRef} (${formattedPrice}). Is this piece currently available?`;
       const txt = document.getElementById('availInquiryText');
       txt.value = defaultInquiry;
 
       const btn = document.getElementById('availWhatsAppBtn');
-      if (cleanPhone) {
-        btn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(defaultInquiry)}`;
-        btn.classList.remove('opacity-50', 'pointer-events-none');
-      } else {
-        btn.href = '#';
-        btn.classList.add('opacity-50', 'pointer-events-none');
+      if (btn) {
+        const span = btn.querySelector('span');
+        if (span) span.textContent = t.connectWhatsApp;
+        if (cleanPhone) {
+          btn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(defaultInquiry)}`;
+          btn.classList.remove('opacity-50', 'pointer-events-none');
+        } else {
+          btn.href = '#';
+          btn.classList.add('opacity-50', 'pointer-events-none');
+        }
       }
 
       txt.oninput = () => {
-        if (cleanPhone) {
+        if (cleanPhone && btn) {
           btn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(txt.value)}`;
         }
       };
@@ -4024,6 +4076,260 @@
       setTimeout(() => {
         toast.classList.add('opacity-0', 'pointer-events-none');
       }, 3500);
+    }
+
+    // -------------------------------------------------------------
+    // MULTILINGUAL TRANSLATION ENGINE (EN, ES, ZH, JA, AR, FR)
+    // -------------------------------------------------------------
+    let currentAppLang = 'en';
+
+    const UI_TRANSLATIONS = {
+      en: {
+        code: 'EN',
+        tradingFloor: 'Trading Floor',
+        priceResearch: 'Price Research',
+        referenceCheck: 'Reference Check',
+        postIt: 'Post It',
+        filters: 'Filters',
+        allInventory: 'All inventory',
+        watches: 'Watches',
+        handbags: 'Handbags',
+        jewelry: 'Jewelry',
+        accessories: 'Accessories',
+        otherLuxury: 'Other luxury',
+        checkAvailability: 'Check availability',
+        connectBuyer: 'Connect with Buyer',
+        buyerRequest: 'Buyer Request',
+        forSale: 'FOR SALE',
+        wtbBuyerReq: 'WTB / BUYER REQUEST',
+        priceOnRequest: 'Price on Request',
+        postedBy: 'Posted by',
+        verifiedDealer: 'Verified Dealer',
+        reviews: 'reviews',
+        belowMarket: 'Below Market',
+        aboveMarket: 'Above Market',
+        fairMarket: 'Fair Market',
+        priceBenchmark: 'Price Benchmark',
+        marketVerified: 'Market Verified',
+        connectWhatsApp: 'Connect on WhatsApp',
+        originalRawMsg: 'Original raw message',
+        verifiedInquiry: 'Curated Luxury · Verified Inquiry',
+        resetFilters: 'Reset Filters',
+        inquiryGreeting: 'Hi there, I found your listing on Curated Luxury'
+      },
+      es: {
+        code: 'ES',
+        tradingFloor: 'Piso de Negociación',
+        priceResearch: 'Análisis de Precios',
+        referenceCheck: 'Verificación de Distribuidores',
+        postIt: 'Publicar',
+        filters: 'Filtros',
+        allInventory: 'Todo el inventario',
+        watches: 'Relojes',
+        handbags: 'Bolsos de lujo',
+        jewelry: 'Joyería fina',
+        accessories: 'Accesorios',
+        otherLuxury: 'Otro lujo',
+        checkAvailability: 'Consultar disponibilidad',
+        connectBuyer: 'Contactar al Comprador',
+        buyerRequest: 'Solicitud de Compra',
+        forSale: 'EN VENTA',
+        wtbBuyerReq: 'SOLICITUD DE COMPRA (WTB)',
+        priceOnRequest: 'Precio a Petición',
+        postedBy: 'Publicado por',
+        verifiedDealer: 'Distribuidor Verificado',
+        reviews: 'reseñas',
+        belowMarket: 'Bajo el Mercado',
+        aboveMarket: 'Sobre el Mercado',
+        fairMarket: 'Precio Justo',
+        priceBenchmark: 'Referencia de Precio',
+        marketVerified: 'Verificado por Mercado',
+        connectWhatsApp: 'Contactar por WhatsApp',
+        originalRawMsg: 'Mensaje original sin editar',
+        verifiedInquiry: 'Curated Luxury · Consulta Verificada',
+        resetFilters: 'Restablecer Filtros',
+        inquiryGreeting: 'Hola, vi su publicación en Curated Luxury'
+      },
+      zh: {
+        code: 'ZH',
+        tradingFloor: '交易大廳',
+        priceResearch: '行情研究',
+        referenceCheck: '經銷商驗證',
+        postIt: '發布貨源',
+        filters: '篩選條件',
+        allInventory: '全部庫存',
+        watches: '腕錶',
+        handbags: '奢華手袋',
+        jewelry: '高級珠寶',
+        accessories: '配飾',
+        otherLuxury: '其他名品',
+        checkAvailability: '查詢現貨狀態',
+        connectBuyer: '聯繫買家',
+        buyerRequest: '求購需求',
+        forSale: '在售現貨',
+        wtbBuyerReq: '求購需求 (WTB)',
+        priceOnRequest: '價格面議',
+        postedBy: '發布商戶',
+        verifiedDealer: '已驗證經銷商',
+        reviews: '條評價',
+        belowMarket: '低於行情',
+        aboveMarket: '高於行情',
+        fairMarket: '合理行情',
+        priceBenchmark: '行情基準',
+        marketVerified: '市場已核驗',
+        connectWhatsApp: '通過 WhatsApp 聯繫',
+        originalRawMsg: '原始交易廣播消息',
+        verifiedInquiry: 'Curated Luxury · 已核實詢價',
+        resetFilters: '重置篩選',
+        inquiryGreeting: '您好，我在 Curated Luxury 上看到您的發布'
+      },
+      ja: {
+        code: 'JA',
+        tradingFloor: '取引フロア',
+        priceResearch: '相場リサーチ',
+        referenceCheck: 'ディーラー確認',
+        postIt: '出品する',
+        filters: '絞り込み',
+        allInventory: '全在庫',
+        watches: '時計',
+        handbags: 'バッグ',
+        jewelry: 'ジュエリー',
+        accessories: 'アクセサリー',
+        otherLuxury: 'その他高級品',
+        checkAvailability: '在庫確認・問い合わせ',
+        connectBuyer: '買い手と連絡',
+        buyerRequest: '買付希望',
+        forSale: '販売中',
+        wtbBuyerReq: '買付希望 (WTB)',
+        priceOnRequest: '価格応相談',
+        postedBy: '出品ディーラー',
+        verifiedDealer: '認証ディーラー',
+        reviews: '件のレビュー',
+        belowMarket: '相場割安',
+        aboveMarket: '相場上回る',
+        fairMarket: '適正相場',
+        priceBenchmark: '相場指標',
+        marketVerified: '市場検証済み',
+        connectWhatsApp: 'WhatsAppで問い合わせ',
+        originalRawMsg: '元の出品メッセージ',
+        verifiedInquiry: 'Curated Luxury · 認証問い合わせ',
+        resetFilters: '条件リセット',
+        inquiryGreeting: 'こんにちは、Curated Luxuryの出品を拝見しました'
+      },
+      ar: {
+        code: 'AR',
+        tradingFloor: 'منصة التداول',
+        priceResearch: 'تحليل الأسعار',
+        referenceCheck: 'فحص التجار',
+        postIt: 'إضافة عرض',
+        filters: 'تصفية',
+        allInventory: 'كامل المخزون',
+        watches: 'ساعات فاخرة',
+        handbags: 'حقائب فاخرة',
+        jewelry: 'مجوهرات راقية',
+        accessories: 'إكسسوارات',
+        otherLuxury: 'قطع نادرة',
+        checkAvailability: 'التحقق من التوفر',
+        connectBuyer: 'التواصل مع المشتري',
+        buyerRequest: 'طلب شراء',
+        forSale: 'للبيع',
+        wtbBuyerReq: 'طلب شراء (WTB)',
+        priceOnRequest: 'السعر عند الطلب',
+        postedBy: 'بواسطة',
+        verifiedDealer: 'تاجر معتمد',
+        reviews: 'تقييمات',
+        belowMarket: 'أقل من سعر السوق',
+        aboveMarket: 'أعلى من السوق',
+        fairMarket: 'سعر السوق العادل',
+        priceBenchmark: 'مؤشر السعر',
+        marketVerified: 'موثق رسمياً',
+        connectWhatsApp: 'تواصل عبر واتساب',
+        originalRawMsg: 'نص الإعلان الأصلي',
+        verifiedInquiry: 'Curated Luxury · استفسار موثق',
+        resetFilters: 'إعادة ضبط',
+        inquiryGreeting: 'مرحباً، وجدت إعلانكم على Curated Luxury'
+      },
+      fr: {
+        code: 'FR',
+        tradingFloor: 'Salle des Marchés',
+        priceResearch: 'Analyse des Prix',
+        referenceCheck: 'Contrôle Marchand',
+        postIt: 'Publier',
+        filters: 'Filtres',
+        allInventory: 'Tout le catalogue',
+        watches: 'Montres',
+        handbags: 'Sacs de luxe',
+        jewelry: 'Haute Joaillerie',
+        accessories: 'Accessoires',
+        otherLuxury: 'Autres pièces',
+        checkAvailability: 'Vérifier disponibilité',
+        connectBuyer: 'Contacter l\'Acheteur',
+        buyerRequest: 'Demande d\'Achat',
+        forSale: 'EN VENTE',
+        wtbBuyerReq: 'DEMANDE D\'ACHAT (WTB)',
+        priceOnRequest: 'Prix sur demande',
+        postedBy: 'Publié par',
+        verifiedDealer: 'Marchand Certifié',
+        reviews: 'avis',
+        belowMarket: 'Sous le Marché',
+        aboveMarket: 'Au-dessus du Marché',
+        fairMarket: 'Prix Équitable',
+        priceBenchmark: 'Indice de Référence',
+        marketVerified: 'Vérifié sur le marché',
+        connectWhatsApp: 'Contacter sur WhatsApp',
+        originalRawMsg: 'Message brut d\'origine',
+        verifiedInquiry: 'Curated Luxury · Demande Vérifiée',
+        resetFilters: 'Réinitialiser Filtres',
+        inquiryGreeting: 'Bonjour, j\'ai vu votre publication sur Curated Luxury'
+      }
+    };
+
+    function toggleLanguageDropdown() {
+      const menu = document.getElementById('langDropdownMenu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    // Close language dropdown on outside click
+    document.addEventListener('click', (e) => {
+      const btn = document.getElementById('langDropdownBtn');
+      const menu = document.getElementById('langDropdownMenu');
+      if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    function setLanguage(langCode) {
+      if (!UI_TRANSLATIONS[langCode]) langCode = 'en';
+      currentAppLang = langCode;
+      const t = UI_TRANSLATIONS[langCode];
+
+      const lbl = document.getElementById('currentLangLabel');
+      if (lbl) lbl.textContent = t.code;
+
+      const menu = document.getElementById('langDropdownMenu');
+      if (menu) menu.classList.add('hidden');
+
+      // Update Desktop and Mobile Navigation
+      const navT = document.getElementById('navTradingFloor');
+      if (navT) navT.textContent = t.tradingFloor;
+      const mobT = document.getElementById('mobNavTrading');
+      if (mobT) mobT.textContent = t.tradingFloor;
+
+      const navP = document.getElementById('navPriceResearch');
+      if (navP) navP.textContent = t.priceResearch;
+      const mobP = document.getElementById('mobNavResearch');
+      if (mobP) mobP.textContent = t.priceResearch;
+
+      const navD = document.getElementById('navDealers');
+      if (navD) navD.textContent = t.referenceCheck;
+      const mobD = document.getElementById('mobNavDealers');
+      if (mobD) mobD.textContent = t.referenceCheck;
+
+      // Re-render listings so buttons and badges switch language cleanly
+      if (currentView === 'trading-floor') {
+        renderListings();
+      }
+      showToast(`✓ Language set to ${t.code}`);
     }
 
     // Restore Session
