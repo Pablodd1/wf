@@ -602,16 +602,21 @@
       <div class="mb-4 p-3.5 rounded-xl border border-[#E5DACB] bg-[#FAF6F0] shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-3">
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
-          <div class="flex flex-col gap-0.5">
+          <div class="flex flex-col gap-1">
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span class="font-bold text-[#1C1917]"><span id="catalogTotalDisplay">1,225,000</span> Verified Catalog Listings</span>
+              <span class="font-bold text-[#1C1917]"><strong id="totalWatchesDisplay" class="text-[#1C1917]">1,218,324</strong> Watches</span>
               <span class="text-[#8A5826] font-mono">·</span>
-              <span class="text-[#6B7280]"><strong id="catalogLoadedDisplay" class="text-[#1C1917]">25,000</strong> Active on Floor</span>
+              <span class="font-bold text-[#8A5826]"><strong id="totalLuxuryDisplay" class="text-[#8A5826]">6,676</strong> Luxury Items</span>
               <span class="text-[#8A5826] font-mono">·</span>
-              <span class="text-[#9E6B38] font-medium"><strong id="catalogPendingDisplay" class="text-[#9E6B38]">1,200,000 in 48 Pending Chunks</strong></span>
+              <span class="font-bold text-[#1C1917]"><strong id="catalogTotalDisplay" class="text-[#1C1917]">1,225,000</strong> Total Verified</span>
             </div>
-            <div class="text-[11px] text-[#78716C] font-sans">
-              Consolidated Catalog: <strong class="text-[#1C1917]">165,588</strong> Standalone Singles + <strong class="text-[#1C1917]">1,059,412</strong> Unbundled from Multi-Posts (100% Verified)
+            <div class="flex items-center flex-wrap gap-2 text-[11px] text-[#6B7280]">
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Live Chats &amp; OD Synced</span>
+              </span>
+              <span>·</span>
+              <span><strong id="catalogLoadedDisplay" class="text-[#1C1917]">25,000</strong> on floor (<strong id="catalogPendingDisplay" class="text-[#9E6B38]">1,200,000 in 48 pending chunks</strong>)</span>
             </div>
           </div>
         </div>
@@ -802,24 +807,24 @@
               <label class="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-2">Category</label>
               <div class="space-y-1.5 text-xs text-[#1C1917]">
                 <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="cat-all" onchange="toggleCategoryFilter('all')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>All inventory</span>
+                  <input type="checkbox" id="cat-all" checked onchange="toggleCategoryFilter('all')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
+                  <span class="font-bold">All inventory (1,225,000)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="cat-Watches" checked onchange="toggleCategoryFilter('Watches')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Watches</span>
+                  <input type="checkbox" id="cat-Watches" onchange="toggleCategoryFilter('Watches')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
+                  <span>Watches (1,218,324)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Handbags" onchange="toggleCategoryFilter('Handbags')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Handbags</span>
+                  <span>Handbags (550)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Jewelry" onchange="toggleCategoryFilter('Jewelry')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Jewelry</span>
+                  <span>Jewelry (1,637)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Accessories" onchange="toggleCategoryFilter('Accessories')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
-                  <span>Accessories</span>
+                  <span>Accessories (4,489)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cat-Other luxury" onchange="toggleCategoryFilter('Other luxury')" class="rounded border-[#CBD5E1] text-[#8A5826] focus:ring-0">
@@ -1559,9 +1564,13 @@
       const total = ALL_LISTINGS.length;
       const pending = Math.max(0, totalCatalogListings - total);
 
+      const watchesDisplay = document.getElementById('totalWatchesDisplay');
+      const luxuryDisplay = document.getElementById('totalLuxuryDisplay');
+      if (watchesDisplay) watchesDisplay.textContent = (catalogMeta.total_watches || 1218324).toLocaleString('en-US');
+      if (luxuryDisplay) luxuryDisplay.textContent = (catalogMeta.total_luxury_items || 6676).toLocaleString('en-US');
       if (totalDisplay) totalDisplay.textContent = totalCatalogListings.toLocaleString('en-US');
       if (loadedDisplay) loadedDisplay.textContent = total.toLocaleString('en-US');
-      if (pendingDisplay) pendingDisplay.textContent = `${pending.toLocaleString('en-US')} in ${Math.max(0, totalCatalogChunks - loadedChunkIndices.size)} Pending Chunks`;
+      if (pendingDisplay) pendingDisplay.textContent = `${pending.toLocaleString('en-US')} in ${Math.max(0, totalCatalogChunks - loadedChunkIndices.size)} pending chunks`;
       if (sub) {
         sub.innerHTML = `Showing <strong class="text-[#1C1917]">${total.toLocaleString('en-US')}</strong> active listings on floor of <strong class="text-[#1C1917]">${totalCatalogListings.toLocaleString('en-US')}</strong> catalog total (${pending.toLocaleString('en-US')} pending in chunks) · confirm availability`;
       }
@@ -1584,7 +1593,7 @@
     let currentView = 'trading-floor';
     let viewMode = 'grid'; // 'grid' or 'list'
     let currentOrder = 'source-images-first';
-    let selectedCategories = new Set(['Watches']);
+    let selectedCategories = new Set(['all']);
     let selectedListingTypes = new Set(['all']);
     let selectedBrand = 'all';
     let selectedLocations = new Set(['all']);
@@ -1873,7 +1882,7 @@
     }
 
     function resetAllFilters() {
-      selectedCategories = new Set(['Watches']);
+      selectedCategories = new Set(['all']);
       selectedListingTypes = new Set(['all']);
       selectedBrand = 'all';
       selectedLocations = new Set(['all']);
@@ -1887,9 +1896,11 @@
       document.getElementById('searchInput').value = '';
       document.getElementById('orderSelect').value = 'source-images-first';
       document.getElementById('brandSelect').value = 'all';
-      document.getElementById('cat-all').checked = false;
-      document.getElementById('cat-Watches').checked = true;
-      ['Handbags', 'Jewelry', 'Accessories', 'Other luxury'].forEach(c => document.getElementById(`cat-${c}`).checked = false);
+      document.getElementById('cat-all').checked = true;
+      ['Watches', 'Handbags', 'Jewelry', 'Accessories', 'Other luxury'].forEach(c => {
+        const el = document.getElementById(`cat-${c}`);
+        if (el) el.checked = false;
+      });
       document.getElementById('type-all').checked = true;
       document.getElementById('type-sale').checked = false;
       document.getElementById('type-wtb').checked = false;
@@ -1916,8 +1927,6 @@
     // Filter Listings
     function getFilteredListings() {
       const baseFiltered = ALL_LISTINGS.filter(item => {
-        // Always include newly published live posts from active session
-        if (item.is_live_post) return true;
         // Category filter
         if (!selectedCategories.has('all')) {
           const itemCat = item.category || 'Watches';
@@ -1950,7 +1959,9 @@
 
         // Search text
         if (currentSearch) {
-          const hay = `${item.brand} ${item.model} ${item.reference} ${item.dial} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
+          const nickStr = (item.nicknames || []).join(' ');
+          const compStr = (item.completeness_tags || []).join(' ');
+          const hay = `${item.brand} ${item.model} ${item.reference} ${item.dial} ${item.category || ''} ${nickStr} ${compStr} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
           if (!hay.includes(currentSearch)) return false;
         }
 
@@ -1995,6 +2006,13 @@
       return 4;
     }
 
+    function parseItemDateTimestamp(dateStr) {
+      if (!dateStr) return 0;
+      const clean = String(dateStr).replace(/-/g, '/').trim();
+      const t = Date.parse(clean);
+      return isNaN(t) ? 0 : t;
+    }
+
     function sortListings(items) {
       return items.sort((a, b) => {
         // Priority 0: Newly published live listings from active dealer session
@@ -2002,28 +2020,25 @@
         if (!a.is_live_post && b.is_live_post) return 1;
 
         // Strict Order:
-        // Priority 1: Direct Single listings with images (sorted newest date first, then highest price)
-        // Priority 2: Standalone listings without images (sorted newest date first, then highest price)
-        // Priority 3: Unbundled child listings (sorted newest date first, then highest price)
+        // Priority 1: Listings with authentic images (newest date first, then highest price)
+        // Priority 2: Standalone listings without images (newest date first, then highest price)
+        // Priority 3: Unbundled child listings without images (newest date first, then highest price)
         const hasImgA = Boolean(a.image_url && String(a.image_url).trim() !== '');
         const hasImgB = Boolean(b.image_url && String(b.image_url).trim() !== '');
         const unbundledA = Boolean(a.is_unbundled);
         const unbundledB = Boolean(b.is_unbundled);
 
-        // Group 1: Has Image
-        // Group 2: No Image, Standalone
-        // Group 3: No Image, Unbundled
         const groupA = hasImgA ? 1 : (!unbundledA ? 2 : 3);
         const groupB = hasImgB ? 1 : (!unbundledB ? 2 : 3);
 
         if (groupA !== groupB) return groupA - groupB;
 
-        // Within same group: Sort by Date descending (newest post first)
-        const dateA = a.created_on ? new Date(a.created_on.replace(/-/g, '/')).getTime() : 0;
-        const dateB = b.created_on ? new Date(b.created_on.replace(/-/g, '/')).getTime() : 0;
+        // Within same priority group: Sort by Date descending (newest post first)
+        const dateA = parseItemDateTimestamp(a.created_on);
+        const dateB = parseItemDateTimestamp(b.created_on);
         if (dateB !== dateA) return dateB - dateA;
 
-        // Secondary: Higher Price first
+        // Secondary within same date: Higher Price first
         return (b.price_usd || b.price || 0) - (a.price_usd || a.price || 0);
       });
     }
@@ -2199,7 +2214,7 @@
                   <img src="${item.image_url}" alt="${item.brand} ${item.model}" class="w-full h-full object-cover object-center transition hover:scale-105" loading="lazy" onerror="handleListingImageError(this)"/>
                 ` : `
                   <div class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
-                    <span class="text-2xl mb-1">⌚</span>
+                    <span class="text-2xl mb-1">${(item.category === 'Handbags') ? '👜' : ((item.category === 'Jewelry') ? '💍' : ((item.category === 'Accessories') ? '🕶️' : '⌚'))}</span>
                     <span>${item.brand}</span>
                     <span class="text-[10px] text-[#8A7E70] mt-1">${item.is_unbundled ? 'Unbundled child listing' : 'No photo attached'}</span>
                   </div>
@@ -2236,7 +2251,15 @@
                   <button type="button" onclick="openAvailabilityModal('${item.id}')" class="mt-1 block text-left font-serif text-[18px] font-semibold leading-snug tracking-tight text-[#1C1917] hover:text-[#78350F]">
                     ${item.brand} ${item.model} ${cleanRef}
                   </button>
-                  ${item.year ? `<div class="mt-1 text-xs text-[#6B7280]">${item.year}</div>` : ''}
+                  ${item.year ? `<div class="mt-1 text-xs text-[#6B7280]">Year: ${item.year}</div>` : ''}
+                  ${(item.nicknames && item.nicknames.length > 0) || item.dial || (item.completeness_tags && item.completeness_tags.length > 0) || item.condition ? `
+                    <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                      ${(item.nicknames || []).map(n => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#EFE5D8] text-[#653E23] border border-[#E5DACB]">⭐ ${escapeHtml(n)}</span>`).join('')}
+                      ${item.dial ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-700 border border-stone-200">🎨 ${escapeHtml(item.dial)} Dial</span>` : ''}
+                      ${(item.completeness_tags || []).map(c => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-900 border border-amber-200">📦 ${escapeHtml(c)}</span>`).join('')}
+                      ${item.condition ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">✨ ${escapeHtml(item.condition)}</span>` : ''}
+                    </div>
+                  ` : ''}
 
                   <!-- Collapsible Raw Message -->
                   <details class="group mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2">
@@ -2280,7 +2303,7 @@
                 <img alt="${item.brand} ${item.model}" class="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]" loading="lazy" src="${item.image_url}" onerror="handleListingImageError(this)"/>
               ` : `
                 <div class="h-[340px] w-full flex flex-col items-center justify-center p-6 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
-                  <span class="text-4xl mb-2">⌚</span>
+                  <span class="text-4xl mb-2">${(item.category === 'Handbags') ? '👜' : ((item.category === 'Jewelry') ? '💍' : ((item.category === 'Accessories') ? '🕶️' : '⌚'))}</span>
                   <span class="text-lg">${item.brand}</span>
                   <span class="text-xs font-mono text-[#6B7280] mt-1">${cleanRef || item.category || 'Luxury Piece'}</span>
                   <span class="text-[10px] text-[#A89F93] mt-2">${item.is_unbundled ? 'Unbundled child listing' : 'No photo attached'}</span>
@@ -2321,7 +2344,15 @@
               <button type="button" onclick="openAvailabilityModal('${item.id}')" class="mt-1.5 block text-left font-serif text-[17px] font-semibold leading-snug tracking-tight text-[#1C1917] hover:text-[#78350F]">
                 ${item.brand} ${item.model} ${cleanRef}
               </button>
-              ${item.year ? `<div class="mt-1 text-xs text-[#6B7280]">${item.year}</div>` : ''}
+              ${item.year ? `<div class="mt-1 text-xs text-[#6B7280]">Year: ${item.year}</div>` : ''}
+              ${(item.nicknames && item.nicknames.length > 0) || item.dial || (item.completeness_tags && item.completeness_tags.length > 0) || item.condition ? `
+                <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                  ${(item.nicknames || []).map(n => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#EFE5D8] text-[#653E23] border border-[#E5DACB]">⭐ ${escapeHtml(n)}</span>`).join('')}
+                  ${item.dial ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-700 border border-stone-200">🎨 ${escapeHtml(item.dial)} Dial</span>` : ''}
+                  ${(item.completeness_tags || []).map(c => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-900 border border-amber-200">📦 ${escapeHtml(c)}</span>`).join('')}
+                  ${item.condition ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">✨ ${escapeHtml(item.condition)}</span>` : ''}
+                </div>
+              ` : ''}
             </div>
 
             <!-- 3. Collapsible Original Raw Message -->
@@ -3639,7 +3670,9 @@
       from_number: "+1 305 555 0192",
       created_on: "2026-09-12 13:15:00",
       extracted_line: "Rolex Cosmograph Daytona 116500LN White Panda dial brand new complete box & papers $27,500",
-      image_url: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80",
+      image_url: "https://thecollective-prod.nyc3.digitaloceanspaces.com/products/watches/132366_front_image.jpg",
+      nicknames: ["Panda"],
+      completeness_tags: ["Full Set", "White Tag"],
       location: "Miami, USA",
       category: "Watches",
       is_live_post: true
@@ -3650,7 +3683,23 @@
         const raw = localStorage.getItem('cl_live_dealer_posts');
         if (raw) {
           const list = JSON.parse(raw);
-          if (Array.isArray(list) && list.length > 0) return list;
+          if (Array.isArray(list) && list.length > 0) {
+            let modified = false;
+            const sanitized = list.map(item => {
+              if (item.image_url && (item.image_url.includes('photo-1522335789203') || item.image_url.includes('unsplash.com'))) {
+                item.image_url = "https://thecollective-prod.nyc3.digitaloceanspaces.com/products/watches/132366_front_image.jpg";
+                item.nicknames = ["Panda"];
+                item.completeness_tags = ["Full Set", "White Tag"];
+                item.dial = "White Panda";
+                modified = true;
+              }
+              return item;
+            });
+            if (modified) {
+              localStorage.setItem('cl_live_dealer_posts', JSON.stringify(sanitized));
+            }
+            return sanitized;
+          }
         }
       } catch (e) {
         console.warn("Could not read cl_live_dealer_posts from localStorage", e);
