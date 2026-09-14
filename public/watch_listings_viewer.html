@@ -1342,14 +1342,63 @@
         handleHashChange();
         updateCounterUI();
 
-        // 3. Background preload price research and dealers directory
+        // 3. Start Real-Time Live Feed Poller (polling live incoming broadcasts & unbundled cards)
+        startLiveIncomingPoller();
+
+        // 4. Background preload price research and dealers directory
         preloadAuxiliaryData();
 
-        // 4. Polite background stream remaining chunks 1 to 11
+        // 5. Polite background stream remaining chunks
         // Progressive streaming managed on-demand via loadNextChunk() and toggleAutoStream()
       } catch (err) {
         console.warn("Catalog fetch fallback/error:", err);
       }
+    }
+
+    let livePollerInterval = null;
+    function startLiveIncomingPoller() {
+      if (livePollerInterval) return;
+
+      async function pollLiveFeed() {
+        try {
+          const incoming = await fetchCatalogData('data/live_incoming.json?t=' + Date.now());
+          if (Array.isArray(incoming) && incoming.length > 0) {
+            let newItemsCount = 0;
+            incoming.forEach(it => {
+              if (!listingsById.has(it.id)) {
+                listingsById.set(it.id, it);
+                ALL_LISTINGS.unshift(it);
+                newItemsCount++;
+              }
+            });
+            if (newItemsCount > 0) {
+              updateCounterUI();
+              if (currentView === 'trading-floor') {
+                renderListings();
+                showLiveStreamToast(newItemsCount);
+              }
+            }
+          }
+        } catch (e) {
+          console.debug("Live stream poll check:", e);
+        }
+      }
+
+      setTimeout(pollLiveFeed, 2000);
+      livePollerInterval = setInterval(pollLiveFeed, 15000);
+    }
+
+    function showLiveStreamToast(count) {
+      let toast = document.getElementById('liveIncomingToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'liveIncomingToast';
+        toast.className = 'fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-[#1C1917] text-[#FAF6F0] text-xs font-semibold shadow-xl border border-amber-500/40 transition-all duration-300 transform translate-y-0';
+        document.body.appendChild(toast);
+      }
+      toast.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>+${count} Live Incoming Listings Synced</span>`;
+      toast.style.opacity = '1';
+      setTimeout(() => { if (toast) toast.style.opacity = '0'; }, 4000);
     }
 
     let auxiliaryPromise = null;
