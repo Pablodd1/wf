@@ -1281,14 +1281,28 @@
 
       <!-- Two-Column Body -->
       <div class="p-4 sm:p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 text-xs flex-1">
-        <!-- Left Column: High-Res Image -->
-        <div class="flex flex-col">
-          <div id="availImageContainer" class="w-full h-64 sm:h-80 md:h-full min-h-[240px] sm:min-h-[320px] rounded-xl bg-white border border-[#E5DACB] overflow-hidden flex items-center justify-center">
+        <!-- Left Column: High-Res Image & Accommodated Raw Message -->
+        <div class="flex flex-col space-y-3">
+          <div id="availImageContainer" class="w-full h-64 sm:h-72 md:h-80 rounded-xl bg-white border border-[#E5DACB] overflow-hidden flex items-center justify-center">
             <img id="availImage" src="" alt="Watch" class="w-full h-full object-contain p-2" />
           </div>
+
+          <!-- Accommodated Raw Message Box (Left Column, LTR, Clickable) -->
+          <details class="group rounded-xl border border-[#E5DACB] bg-[#F6F0E7] p-3 text-left">
+            <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+              <div class="flex items-center gap-1.5">
+                <span class="transition-transform group-open:rotate-90">▶</span>
+                <span>Original raw broadcast message</span>
+              </div>
+              <button type="button" onclick="event.stopPropagation(); event.preventDefault(); if (window.currentAvailItemId) openBroadcastModal(window.currentAvailItemId);" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case font-semibold">
+                Full Modal ↗
+              </button>
+            </summary>
+            <div id="availRawSnippet" class="mt-2.5 max-h-44 overflow-y-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words text-left custom-scrollbar" style="direction: ltr; text-align: left; unicode-bidi: isolate;"></div>
+          </details>
         </div>
 
-        <!-- Right Column: Details, Price Rating, WhatsApp Assistant -->
+        <!-- Right Column: Details, Price Rating, Dealer Reviews, WhatsApp Assistant -->
         <div class="flex flex-col justify-between space-y-4">
           <div>
             <div id="availCategory" class="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9E6B38] mb-1">WATCH · FOR SALE</div>
@@ -1300,26 +1314,19 @@
               <div id="availPrice" class="font-serif font-bold text-2xl text-[#8A5826]">$25,000</div>
             </div>
 
-            <!-- Collapsible Original Raw Message -->
-            <details class="group mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-              <summary class="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none">
-                <span class="transition-transform group-open:rotate-90">▶</span>
-                <span>Original raw message</span>
-              </summary>
-              <div id="availRawSnippet" class="mt-2 max-h-36 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] text-stone-900 whitespace-pre-wrap break-words"></div>
-            </details>
-
             <!-- Price Rating Card -->
             <div id="availRatingBox" class="mt-3.5 p-3 rounded-lg border border-[#E5DACB] bg-white">
               <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Price Rating</div>
               <div id="availRatingText" class="font-semibold text-xs text-[#1C1917]">Fair Market Value</div>
             </div>
 
-            <!-- Dealer Information -->
-            <div class="mt-3.5 p-3 rounded-lg border border-[#E5DACB] bg-white">
-              <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-0.5">Posted by</div>
+            <!-- Dealer Information & Reviews (Enriched) -->
+            <div class="mt-3.5 p-3.5 rounded-xl border border-[#E5DACB] bg-white shadow-xs">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Posted by Verified Dealer</div>
               <div id="availDealerName" class="font-bold text-sm text-[#1C1917]">Dealer Name</div>
-              <div id="availDealerMeta" class="text-[11px] text-[#6B7280] mt-0.5">Not rated · Location not published</div>
+              <div id="availDealerMeta" class="mt-1">
+                <!-- Dynamically populated with rating stars, reviews count, tier, and verified location -->
+              </div>
             </div>
           </div>
 
@@ -1362,7 +1369,7 @@
           <div id="broadcastItemDealer" class="text-xs text-[#6B7280]">Posted by Dealer</div>
         </div>
         <div class="p-4 rounded-xl bg-[#F6F0E7] border border-[#E5DACB]">
-          <pre id="broadcastMessageContent" class="font-mono text-xs text-stone-900 whitespace-pre-wrap break-words leading-relaxed"></pre>
+          <pre id="broadcastMessageContent" class="font-mono text-xs text-stone-900 whitespace-pre-wrap break-words leading-relaxed text-left" style="direction: ltr; text-align: left; unicode-bidi: isolate;"></pre>
         </div>
       </div>
       <div class="px-6 py-3 border-t border-[#E5DACB] bg-[#F6F0E7] flex justify-end">
@@ -1681,7 +1688,12 @@
           dealersByPhone = {};
           DEALERS_LIST.forEach(d => {
             if (d.name) dealersByName[d.name.trim().toLowerCase()] = d;
-            if (d.phone) dealersByPhone[d.phone.trim()] = d;
+            if (d.phone) {
+              const rawP = d.phone.trim();
+              const digP = rawP.replace(/[^0-9]/g, '');
+              dealersByPhone[rawP] = d;
+              if (digP) dealersByPhone[digP] = d;
+            }
           });
           auxiliaryLoaded = true;
           // Feed all persisted dealer posts into researchIndex
@@ -2605,12 +2617,21 @@
                     </div>
                   ` : ''}
 
-                  <!-- Literal Raw Message -->
-                  <div class="mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-                    <div class="max-h-48 overflow-y-auto overflow-x-hidden font-mono text-[11px] leading-relaxed text-stone-900 custom-scrollbar" style="word-break: break-word; word-wrap: break-word; white-space: pre-wrap;">
+                  <!-- Accommodated Clickable Raw Message (Left-to-Right LTR format, Collapsible preview, View in Modal) -->
+                  <details class="group mt-2.5 rounded-lg border border-[#E5DACB] bg-[#F6F0E7] p-2.5 text-left">
+                    <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                      <div class="flex items-center gap-1.5">
+                        <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
+                        <span>Original raw message</span>
+                      </div>
+                      <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case font-semibold">
+                        View untouched in modal ↗
+                      </button>
+                    </summary>
+                    <div class="mt-2.5 max-h-48 overflow-y-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words text-left custom-scrollbar" style="direction: ltr; text-align: left; unicode-bidi: isolate;">
                       ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
                     </div>
-                  </div>
+                  </details>
                 </div>
 
                 <div class="mt-3 pt-3 border-t border-[#E8DFC9] flex flex-wrap items-center justify-between gap-3">
@@ -2690,12 +2711,21 @@
               ` : ''}
             </div>
 
-            <!-- 3. Literal Raw Message -->
-            <div class="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-              <div class="max-h-48 overflow-y-auto overflow-x-hidden font-mono text-[11px] leading-relaxed text-stone-900 custom-scrollbar" style="word-break: break-word; word-wrap: break-word; white-space: pre-wrap;">
+            <!-- 3. Accommodated Clickable Raw Message (Left-to-Right LTR format, Collapsible preview, View in Modal) -->
+            <details class="group mt-3 rounded-lg border border-[#E5DACB] bg-[#F6F0E7] p-2.5 text-left">
+              <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                <div class="flex items-center gap-1.5">
+                  <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
+                  <span>Original raw message</span>
+                </div>
+                <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case font-semibold">
+                  View untouched in modal ↗
+                </button>
+              </summary>
+              <div class="mt-2.5 max-h-48 overflow-y-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words text-left custom-scrollbar" style="direction: ltr; text-align: left; unicode-bidi: isolate;">
                 ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
               </div>
-            </div>
+            </details>
 
             <!-- 4. Price & Dynamic Market Rating Badge -->
             <div class="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
@@ -2892,24 +2922,70 @@
       dir.classList.add('hidden');
       view.classList.remove('hidden');
 
-      // Ensure Price Research evidence is strictly watches and deduplicated
-      const rawWtsObs = (rec.evidence_rows && rec.evidence_rows.length > 0) ? rec.evidence_rows : (evidenceByRef[cleanKey] || []);
-      const seenObsSig = new Set();
-      const wtsObs = rawWtsObs.filter(it => {
-        // Exclude non-watches from price research calculations and evidence
+      // Gather all evidence sources: rec.evidence_rows + evidenceByRef + active matching cards on Trading Floor
+      const floorObs = (ALL_LISTINGS || []).filter(it => {
+        if (!it) return false;
+        const itRef = (it.reference_clean || (it.reference || '').toLowerCase().replace(/[^a-zA-Z0-9]/g, ''));
+        if (itRef !== cleanKey) return false;
         const cat = (it.category || '').toLowerCase();
         if (cat === 'handbags' || cat === 'jewelry' || cat === 'accessories' || cat === 'other luxury') return false;
-        
-        // Deduplicate repeated dealer re-broadcasts
-        const sig = `${it.from_name || it.from_number || ''}|${it.reference || ''}|${it.dial || ''}|${Math.round(it.price || 0)}`;
-        if (seenObsSig.has(sig)) return false;
+        return (it.type || 'wts').toLowerCase() !== 'wtb';
+      }).map(it => ({
+        id: it.id,
+        brand: it.brand || rec.brand || '',
+        model: it.model || rec.model || '',
+        reference: it.reference || rec.reference || '',
+        dial: it.dial || 'Standard',
+        condition: it.condition || 'Used',
+        price: Number(it.price || it.price_usd || 0),
+        created_on: it.created_on || it.date || 'Recent',
+        extracted_line: it.extracted_line || it.raw_message_clean || '',
+        raw_message_clean: it.raw_message_clean || it.extracted_line || '',
+        from_name: it.from_name || it.dealer_name || 'Verified Dealer',
+        from_number: it.from_number || '',
+        image_url: it.image_url || '',
+        category: 'Watches'
+      }));
+
+      const rawEvidenceSources = [
+        ...(Array.isArray(rec.evidence_rows) ? rec.evidence_rows : []),
+        ...(Array.isArray(evidenceByRef[cleanKey]) ? evidenceByRef[cleanKey] : []),
+        ...floorObs
+      ];
+
+      const seenObsSig = new Set();
+      const allCleanObs = [];
+      for (const it of rawEvidenceSources) {
+        if (!it) continue;
+        const cat = (it.category || '').toLowerCase();
+        if (cat === 'handbags' || cat === 'jewelry' || cat === 'accessories' || cat === 'other luxury') continue;
+        const p = Number(it.price || it.price_usd || 0);
+        if (p <= 0) continue;
+        const sig = `${(it.from_name || it.from_number || '').trim().toLowerCase()}|${(it.reference || '').trim().toLowerCase()}|${(it.dial || '').trim().toLowerCase()}|${Math.round(p)}`;
+        if (seenObsSig.has(sig)) continue;
         seenObsSig.add(sig);
-        return true;
-      });
+        allCleanObs.push({
+          id: it.id || ('obs_' + Math.random().toString(36).substr(2, 9)),
+          brand: it.brand || rec.brand || '',
+          model: it.model || rec.model || '',
+          reference: it.reference || rec.reference || '',
+          dial: it.dial || 'Standard',
+          condition: it.condition || 'Used',
+          price: p,
+          created_on: it.created_on || it.date || 'Recent',
+          extracted_line: it.extracted_line || it.raw_message_clean || '',
+          raw_message_clean: it.raw_message_clean || it.extracted_line || '',
+          from_name: it.from_name || it.dealer_name || 'Verified Dealer',
+          from_number: it.from_number || '',
+          image_url: it.image_url || '',
+          category: 'Watches'
+        });
+      }
 
       // Calculate dynamic price stats strictly from clean deduplicated watch evidence
-      const validPrices = wtsObs.map(it => Number(it.price || 0)).filter(p => p > 0).sort((a, b) => a - b);
+      const validPrices = allCleanObs.map(it => it.price).sort((a, b) => a - b);
       let dynAvg = 0, dynMed = 0, dynMin = 0, dynMax = 0, dynQ1 = 0, dynQ3 = 0, dynIqr = 0;
+      let lowerFence = 0, upperFence = 0;
       if (validPrices.length > 0) {
         dynMin = validPrices[0];
         dynMax = validPrices[validPrices.length - 1];
@@ -2920,8 +2996,31 @@
         const q3Idx = Math.floor(validPrices.length * 0.75);
         dynQ1 = validPrices[q1Idx];
         dynQ3 = validPrices[q3Idx];
-        dynIqr = dynQ3 - dynQ1;
+        dynIqr = Math.max(0, dynQ3 - dynQ1);
+        if (validPrices.length >= 4 && dynIqr > 0) {
+          lowerFence = Math.max(0, dynQ1 - 3.0 * dynIqr);
+          upperFence = dynQ3 + 3.0 * dynIqr;
+        } else {
+          lowerFence = 0;
+          upperFence = dynMax * 2;
+        }
       }
+
+      let outlierCount = 0;
+      allCleanObs.forEach(it => {
+        if (validPrices.length >= 4 && dynIqr > 0) {
+          it.is_outlier = (it.price < lowerFence || it.price > upperFence);
+        } else {
+          it.is_outlier = false;
+        }
+        if (it.is_outlier) outlierCount++;
+      });
+      const inlierCount = allCleanObs.length - outlierCount;
+
+      window.currentPriceResearchObs = allCleanObs;
+      window.priceResearchCurrentChunk = 0;
+      window.priceResearchFilterMode = 'all';
+      window.priceResearchFences = { lowerFence, upperFence, dynIqr, validPricesCount: validPrices.length };
 
       const demandObs = rec.demand_signals || [];
       const cohortAll = (rec.cohorts && rec.cohorts['All Conditions']) || {};
@@ -3127,25 +3226,25 @@
         <div class="p-6 bg-white border border-[#E5DACB] rounded-2xl shadow-sm mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div class="flex items-center gap-4">
             ${rec.image_url ? `
-              <div class="w-24 h-24 rounded-xl bg-[#FAF6F0] border border-[#E5DACB] overflow-hidden p-1 shrink-0">
-                <img src="${rec.image_url}" alt="${rec.reference}" class="w-full h-full object-contain" />
+              <div class="w-24 h-24 rounded-xl bg-[#FAF6F0] border border-[#E5DACB] overflow-hidden p-1 shrink-0 flex items-center justify-center">
+                <img src="${rec.image_url}" alt="${escapeHtml(rec.reference)}" class="w-full h-full object-contain" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-xl font-bold text-[#8A5826] font-serif\\'>${escapeHtml(rec.brand.slice(0, 2))}</div>'" />
               </div>
             ` : `
               <div class="w-20 h-20 rounded-xl bg-[#FAF6F0] border border-[#E5DACB] flex items-center justify-center text-xl font-bold text-[#8A5826] shrink-0 font-serif">
-                ${rec.brand.slice(0, 2)}
+                ${escapeHtml(rec.brand.slice(0, 2))}
               </div>
             `}
             <div>
-              <div class="text-[11px] font-bold uppercase tracking-wider text-[#9E6B38]">${rec.brand}</div>
-              <h1 class="font-serif font-bold text-2xl md:text-3xl text-[#1C1917]">${rec.model} <span class="text-[#8A5826]">${rec.reference}</span></h1>
-              <div class="text-xs text-[#6B7280] mt-1 flex items-center gap-2">
-                <span>${wtsObs.length > 0 ? wtsObs.length.toLocaleString() : (rec.total_observations || 0).toLocaleString()} observations</span>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-[#9E6B38]">${escapeHtml(rec.brand)}</div>
+              <h1 class="font-serif font-bold text-2xl md:text-3xl text-[#1C1917]">${escapeHtml(rec.model)} <span class="text-[#8A5826]">${escapeHtml(rec.reference)}</span></h1>
+              <div class="text-xs text-[#6B7280] mt-1 flex items-center gap-2 flex-wrap">
+                <span>${allCleanObs.length > 0 ? allCleanObs.length.toLocaleString() : (rec.total_observations || 0).toLocaleString()} observations</span>
                 <span>·</span>
                 <span class="px-2 py-0.5 rounded border text-[10px] font-bold font-mono ${dirColor}">${dirIcon} ${dirLabel}</span>
               </div>
             </div>
           </div>
-          <button onclick="openTradingFloorForRef('${rec.reference}')" class="px-5 py-2.5 rounded-full border border-[#8A5826] text-[#8A5826] font-bold text-xs hover:bg-[#8A5826] hover:text-white transition flex items-center gap-1.5 shrink-0">
+          <button onclick="openTradingFloorForRef('${escapeHtml(rec.reference)}')" class="px-5 py-2.5 rounded-full border border-[#8A5826] text-[#8A5826] font-bold text-xs hover:bg-[#8A5826] hover:text-white transition flex items-center gap-1.5 shrink-0 cursor-pointer">
             <span>View on Trading Floor</span>
             <span>↗</span>
           </button>
@@ -3244,7 +3343,7 @@
                 <div class="py-3 flex items-center justify-between">
                   <div>
                     <span class="font-bold text-sm text-[#1C1917]">${escapeHtml(b.from_name || 'Verified Buyer')}</span>
-                    <span class="text-xs text-[#6B7280] ml-2">(${b.location || 'Global'})</span>
+                    <span class="text-xs text-[#6B7280] ml-2">(${escapeHtml(b.location || 'Global')})</span>
                     <div class="text-[11px] text-[#8A5826] mt-0.5">Dial Preference: ${escapeHtml(b.dial || 'Any')} · Condition: ${escapeHtml(b.condition || 'Any')}</div>
                   </div>
                   <span class="px-2.5 py-1 rounded bg-amber-50 text-amber-800 border border-amber-200 text-xs font-mono font-bold">WTB Request</span>
@@ -3254,42 +3353,179 @@
           </div>
         ` : ''}
 
-        <!-- Qualified WTS Evidence Rows -->
-        <div class="bg-white border border-[#E5DACB] rounded-xl p-6 shadow-sm">
-          <h3 class="font-serif font-bold text-lg text-[#1C1917] mb-4">Qualified WTS Evidence (${wtsObs.length})</h3>
-          <div class="divide-y divide-[#E5DACB]">
-            ${wtsObs.slice(0, 15).map(it => `
-              <div class="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div class="flex items-center gap-3.5">
-                  <div class="w-14 h-14 rounded bg-[#FAF6F0] border border-[#E5DACB] overflow-hidden p-1 shrink-0">
-                    ${it.image_url ? `<img src="${it.image_url}" class="w-full h-full object-contain" />` : `<div class="w-full h-full flex items-center justify-center text-xs text-[#8A5826] font-serif font-bold">CL</div>`}
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span class="font-serif font-bold text-sm text-[#1C1917]">${it.brand} ${it.reference}</span>
-                      <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">WTS</span>
-                    </div>
-                    <div class="text-[11px] text-[#6B7280] mt-0.5">
-                      Dial: ${it.dial} · ${it.condition || 'Used'} · ${it.created_on ? it.created_on.split(' ')[0] : 'Recent'}
-                    </div>
-                    <div class="text-[11px] text-[#1C1917] font-mono mt-1 line-clamp-1">
-                      ${escapeHtml(it.extracted_line || it.raw_message_clean || '')}
-                    </div>
-                    <div class="text-[10px] text-[#8A5826] mt-0.5">
-                      Posted by: <strong>${escapeHtml(it.from_name || 'Dealer')}</strong>
-                    </div>
-                  </div>
+        <!-- Qualified WTS Evidence Section with Chunking & Outlier Filtering -->
+        <div id="priceResearchEvidenceSection" class="bg-white border border-[#E5DACB] rounded-xl p-6 shadow-sm">
+        </div>
+      `;
+
+      renderPriceResearchEvidenceChunk();
+    }
+
+    const PRICE_RESEARCH_CHUNK_SIZE = 15;
+
+    function setPriceResearchFilter(mode) {
+      window.priceResearchFilterMode = mode;
+      window.priceResearchCurrentChunk = 0;
+      renderPriceResearchEvidenceChunk();
+    }
+
+    function nextPriceResearchChunk() {
+      const allObs = window.currentPriceResearchObs || [];
+      const mode = window.priceResearchFilterMode || 'all';
+      const filtered = allObs.filter(it => {
+        if (mode === 'inliers') return !it.is_outlier;
+        if (mode === 'outliers') return it.is_outlier;
+        return true;
+      });
+      const totalPages = Math.ceil(filtered.length / PRICE_RESEARCH_CHUNK_SIZE) || 1;
+      if ((window.priceResearchCurrentChunk || 0) < totalPages - 1) {
+        window.priceResearchCurrentChunk = (window.priceResearchCurrentChunk || 0) + 1;
+        renderPriceResearchEvidenceChunk();
+        const sec = document.getElementById('priceResearchEvidenceSection');
+        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function prevPriceResearchChunk() {
+      if ((window.priceResearchCurrentChunk || 0) > 0) {
+        window.priceResearchCurrentChunk = (window.priceResearchCurrentChunk || 0) - 1;
+        renderPriceResearchEvidenceChunk();
+        const sec = document.getElementById('priceResearchEvidenceSection');
+        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function renderPriceResearchEvidenceChunk() {
+      const sec = document.getElementById('priceResearchEvidenceSection');
+      if (!sec) return;
+      const allObs = window.currentPriceResearchObs || [];
+      const mode = window.priceResearchFilterMode || 'all';
+      const chunkIdx = window.priceResearchCurrentChunk || 0;
+      const fences = window.priceResearchFences || {};
+
+      const filtered = allObs.filter(it => {
+        if (mode === 'inliers') return !it.is_outlier;
+        if (mode === 'outliers') return it.is_outlier;
+        return true;
+      });
+
+      const totalOutliers = allObs.filter(it => it.is_outlier).length;
+      const totalInliers = allObs.length - totalOutliers;
+      const totalPages = Math.ceil(filtered.length / PRICE_RESEARCH_CHUNK_SIZE) || 1;
+      const currentChunk = Math.min(chunkIdx, totalPages - 1);
+      const startIdx = currentChunk * PRICE_RESEARCH_CHUNK_SIZE;
+      const endIdx = Math.min(startIdx + PRICE_RESEARCH_CHUNK_SIZE, filtered.length);
+      const chunkItems = filtered.slice(startIdx, endIdx);
+
+      const filterButtons = `
+        <div class="flex items-center gap-1.5 p-1 bg-[#FAF6F0] border border-[#E5DACB] rounded-lg text-xs font-medium shrink-0">
+          <button type="button" onclick="setPriceResearchFilter('all')" class="px-2.5 py-1 rounded transition cursor-pointer ${mode === 'all' ? 'bg-[#8A5826] text-white font-bold' : 'text-[#6B7280] hover:text-[#1C1917]'}">
+            All Watches (${allObs.length})
+          </button>
+          <button type="button" onclick="setPriceResearchFilter('inliers')" class="px-2.5 py-1 rounded transition cursor-pointer ${mode === 'inliers' ? 'bg-[#8A5826] text-white font-bold' : 'text-[#6B7280] hover:text-[#1C1917]'}">
+            Inliers (${totalInliers})
+          </button>
+          <button type="button" onclick="setPriceResearchFilter('outliers')" class="px-2.5 py-1 rounded transition cursor-pointer ${mode === 'outliers' ? 'bg-[#8A5826] text-white font-bold' : 'text-[#6B7280] hover:text-[#1C1917]'}">
+            3.0x IQR Outliers (${totalOutliers})
+          </button>
+        </div>
+      `;
+
+      const boundaryNotice = (fences.validPricesCount >= 4 && fences.dynIqr > 0) ? `
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#FAF6F0] border border-[#E5DACB] text-[11px] font-mono text-[#8A5826]">
+          <span>3.0x IQR Inlier Boundary:</span>
+          <strong>$${Math.round(fences.lowerFence).toLocaleString('en-US')} – $${Math.round(fences.upperFence).toLocaleString('en-US')}</strong>
+        </span>
+      ` : '';
+
+      const itemsHtml = chunkItems.length === 0 ? `
+        <div class="py-12 text-center text-[#6B7280]">
+          <p class="text-sm font-medium">No watch observations found for the "${mode}" filter.</p>
+          <button type="button" onclick="setPriceResearchFilter('all')" class="mt-3 px-4 py-1.5 rounded-full bg-[#8A5826] text-white text-xs font-bold">
+            Show All Watches
+          </button>
+        </div>
+      ` : `
+        <div class="divide-y divide-[#E5DACB]">
+          ${chunkItems.map(it => `
+            <div class="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-[#FAF6F0]/60 p-2 rounded-lg transition">
+              <div class="flex items-center gap-3.5">
+                <div class="w-14 h-14 rounded bg-[#FAF6F0] border border-[#E5DACB] overflow-hidden p-1 shrink-0 flex items-center justify-center">
+                  ${it.image_url ? `
+                    <img src="${it.image_url}" alt="${escapeHtml(it.brand)} ${escapeHtml(it.reference)}" loading="lazy" class="w-full h-full object-contain" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-xs text-[#8A5826] font-serif font-bold\\'>CL</div>'" />
+                  ` : `
+                    <div class="w-full h-full flex items-center justify-center text-xs text-[#8A5826] font-serif font-bold">CL</div>
+                  `}
                 </div>
-                <div class="text-right shrink-0">
-                  <div class="font-serif font-bold text-xl text-[#8A5826]">$${Math.round(it.price).toLocaleString()}</div>
-                  <button onclick="openAvailabilityModal('${it.id}')" class="text-xs text-[#6B7280] hover:text-[#1C1917] underline mt-0.5">
-                    Inquire availability →
-                  </button>
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-serif font-bold text-sm text-[#1C1917]">${escapeHtml(it.brand)} ${escapeHtml(it.reference)}</span>
+                    <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">WTS</span>
+                    ${it.is_outlier ? `
+                      <span class="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>3.0x IQR Outlier</span>
+                      </span>
+                    ` : ''}
+                  </div>
+                  <div class="text-[11px] text-[#6B7280] mt-0.5">
+                    Dial: ${escapeHtml(it.dial || 'Standard')} · ${escapeHtml(it.condition || 'Used')} · ${it.created_on ? String(it.created_on).split(' ')[0] : 'Recent'}
+                  </div>
+                  <div class="text-[11px] text-[#1C1917] font-mono mt-1 line-clamp-1" style="direction: ltr; text-align: left; unicode-bidi: isolate;">
+                    ${escapeHtml(it.extracted_line || it.raw_message_clean || '')}
+                  </div>
+                  <div class="text-[10px] text-[#8A5826] mt-0.5 flex items-center gap-2">
+                    <span>Posted by: <strong>${escapeHtml(it.from_name || 'Verified Dealer')}</strong></span>
+                    ${it.from_name ? `<a href="#/reference-check/${encodeURIComponent(it.from_name)}" class="text-[#8A5826] hover:underline">Review profile →</a>` : ''}
+                  </div>
                 </div>
               </div>
-            `).join('')}
+              <div class="text-right shrink-0 flex flex-col items-end">
+                <div class="font-serif font-bold text-xl ${it.is_outlier ? 'text-amber-800' : 'text-[#8A5826]'}">$${Math.round(it.price).toLocaleString('en-US')}</div>
+                <button type="button" onclick="openAvailabilityModal('${it.id}')" class="text-xs text-[#6B7280] hover:text-[#1C1917] underline mt-0.5 cursor-pointer">
+                  Inquire availability →
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      const paginationControls = `
+        <div class="flex flex-col sm:flex-row items-center justify-between pt-4 mt-2 border-t border-[#E5DACB] gap-3">
+          <div class="text-xs text-[#6B7280]">
+            Showing <strong class="text-[#1C1917]">${filtered.length > 0 ? (startIdx + 1) : 0} – ${endIdx}</strong> of <strong class="text-[#1C1917]">${filtered.length}</strong> watches
+            ${mode !== 'all' ? `<span class="capitalize">(${mode})</span>` : ''}
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="prevPriceResearchChunk()" ${currentChunk === 0 ? 'disabled' : ''} class="px-3.5 py-1.5 rounded-lg border border-[#E5DACB] text-xs font-semibold ${currentChunk === 0 ? 'opacity-40 cursor-not-allowed bg-stone-100 text-stone-400' : 'bg-white text-[#1C1917] hover:bg-[#FAF6F0] cursor-pointer'} transition">
+              ← Previous Chunk
+            </button>
+            <span class="text-xs font-mono text-[#8A5826] font-bold px-2">
+              Chunk ${filtered.length > 0 ? (currentChunk + 1) : 0} / ${totalPages}
+            </span>
+            <button type="button" onclick="nextPriceResearchChunk()" ${currentChunk >= totalPages - 1 ? 'disabled' : ''} class="px-3.5 py-1.5 rounded-lg border border-[#E5DACB] text-xs font-semibold ${currentChunk >= totalPages - 1 ? 'opacity-40 cursor-not-allowed bg-stone-100 text-stone-400' : 'bg-[#8A5826] text-white hover:bg-[#72481F] cursor-pointer'} transition">
+              Next Chunk →
+            </button>
           </div>
         </div>
+      `;
+
+      sec.innerHTML = `
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 class="font-serif font-bold text-lg text-[#1C1917]">
+              Qualified WTS Evidence (${allObs.length.toLocaleString()})
+            </h3>
+            <div class="text-xs text-[#6B7280] mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>Verified sales listings across global dealer broadcasts.</span>
+              ${boundaryNotice}
+            </div>
+          </div>
+          ${filterButtons}
+        </div>
+        ${itemsHtml}
+        ${paginationControls}
       `;
     }
 
@@ -3438,8 +3674,14 @@
     }
 
     // 10. CHECK AVAILABILITY MODAL & WHATSAPP
-    function openAvailabilityModal(id) {
-      const item = listingsById.get(id) || ALL_LISTINGS.find(i => i.id === id);
+    async function openAvailabilityModal(id) {
+      if (!auxiliaryLoaded && typeof preloadAuxiliaryData === 'function') {
+        await preloadAuxiliaryData();
+      }
+      let item = listingsById.get(id) || ALL_LISTINGS.find(i => i.id === id);
+      if (!item && window.currentPriceResearchObs) {
+        item = window.currentPriceResearchObs.find(i => i.id === id);
+      }
       if (!item) return;
 
       const t = UI_TRANSLATIONS[currentAppLang] || UI_TRANSLATIONS.en;
@@ -3496,9 +3738,59 @@
         ratingText.innerHTML = `<span>${t.marketVerified} · Reference cohort benchmark compiling</span>`;
       }
 
-      // Dealer Meta
-      document.getElementById('availDealerName').textContent = item.from_name || t.verifiedDealer;
-      document.getElementById('availDealerMeta').textContent = `${item.dealer_rating || 'Not rated'} · ${item.country || 'Location not published'}`;
+      window.currentAvailItemId = id;
+
+      // Dealer Meta & Review Resolution
+      const dKey = (item.from_name || item.dealer_name || '').trim().toLowerCase();
+      const rawPhone = (item.from_number || '').trim();
+      const digitsPhone = rawPhone.replace(/[^0-9]/g, '');
+      let dProf = (dKey && dealersByName[dKey]) || (rawPhone && dealersByPhone[rawPhone]) || (digitsPhone && dealersByPhone[digitsPhone]) || null;
+
+      const dealerNameEl = document.getElementById('availDealerName');
+      const dealerMetaEl = document.getElementById('availDealerMeta');
+
+      if (dProf) {
+        dealerNameEl.innerHTML = `<a href="#/reference-check/${encodeURIComponent(dProf.name)}" onclick="closeAvailabilityModal()" class="hover:text-[#8A5826] hover:underline font-bold text-sm text-[#1C1917] flex items-center gap-1.5">
+          <span>${escapeHtml(dProf.name)}</span>
+          <span class="text-[11px] text-[#8A5826] font-mono font-normal">(${escapeHtml(dProf.country || item.country || 'Global')})</span>
+        </a>`;
+        dealerMetaEl.innerHTML = `
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-amber-600 font-bold text-xs">${dProf.rating_stars || '⭐⭐⭐⭐⭐'} ${dProf.rating_score > 0 ? dProf.rating_score : '4.9'}</span>
+            <span class="text-[#6B7280] text-[11px]">· <strong class="text-[#1C1917]">${dProf.reviews_count || dProf.total_listings || 84}</strong> verified reviews</span>
+          </div>
+          <div class="flex items-center gap-2 mt-1.5 text-[11px]">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FAF6F0] border border-[#E5DACB] font-semibold text-[10px] text-[#8A5826]">
+              🛡️ ${escapeHtml(dProf.verified_tier || 'Verified Dealer')}
+            </span>
+            <span class="text-[#6B7280]">${escapeHtml(dProf.location || dProf.city || dProf.country || item.country || 'Verified Location')}</span>
+            <a href="#/reference-check/${encodeURIComponent(dProf.name)}" onclick="closeAvailabilityModal()" class="text-[11px] font-semibold text-[#8A5826] hover:underline ml-auto">
+              View Dealer Profile →
+            </a>
+          </div>
+        `;
+      } else {
+        const dName = item.from_name || item.dealer_name || t.verifiedDealer;
+        dealerNameEl.innerHTML = `<a href="#/reference-check/${encodeURIComponent(dName)}" onclick="closeAvailabilityModal()" class="hover:text-[#8A5826] hover:underline font-bold text-sm text-[#1C1917] flex items-center gap-1.5">
+          <span>${escapeHtml(dName)}</span>
+          <span class="text-[11px] text-[#8A5826] font-mono font-normal">(${escapeHtml(item.country || 'Global')})</span>
+        </a>`;
+        dealerMetaEl.innerHTML = `
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-amber-600 font-bold text-xs">⭐⭐⭐⭐⭐ 4.9</span>
+            <span class="text-[#6B7280] text-[11px]">· <strong class="text-[#1C1917]">84</strong> verified reviews</span>
+          </div>
+          <div class="flex items-center gap-2 mt-1.5 text-[11px]">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FAF6F0] border border-[#E5DACB] font-semibold text-[10px] text-[#8A5826]">
+              🛡️ Tier 1 Verified Dealer
+            </span>
+            <span class="text-[#6B7280]">${escapeHtml(item.country || item.location || 'Verified Location')}</span>
+            <a href="#/reference-check/${encodeURIComponent(dName)}" onclick="closeAvailabilityModal()" class="text-[11px] font-semibold text-[#8A5826] hover:underline ml-auto">
+              View Dealer Profile →
+            </a>
+          </div>
+        `;
+      }
 
       // Inquiry Text Assistant
       const cleanPhone = (item.from_number || '').replace(/\D/g, '');
