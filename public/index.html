@@ -2193,7 +2193,7 @@
       const sigCounts = new Map();
       baseFiltered.forEach(item => {
         if (item.is_live_post) return;
-        const sig = `${item.from_number || item.from_name || ''}|${item.brand || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
+        const sig = `${item.from_number || item.from_name || ''}|${item.category || 'Watches'}|${item.brand || ''}|${item.model || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
         sigCounts.set(sig, (sigCounts.get(sig) || 0) + 1);
       });
 
@@ -2204,7 +2204,7 @@
           deduped.push(item);
           return;
         }
-        const sig = `${item.from_number || item.from_name || ''}|${item.brand || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
+        const sig = `${item.from_number || item.from_name || ''}|${item.category || 'Watches'}|${item.brand || ''}|${item.model || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
         if (!seenSigs.has(sig)) {
           seenSigs.add(sig);
           item._rebroadcast_count = sigCounts.get(sig) || 1;
@@ -2783,16 +2783,32 @@
         return true;
       });
 
+      // Calculate dynamic price stats strictly from clean deduplicated watch evidence
+      const validPrices = wtsObs.map(it => Number(it.price || 0)).filter(p => p > 0).sort((a, b) => a - b);
+      let dynAvg = 0, dynMed = 0, dynMin = 0, dynMax = 0, dynQ1 = 0, dynQ3 = 0, dynIqr = 0;
+      if (validPrices.length > 0) {
+        dynMin = validPrices[0];
+        dynMax = validPrices[validPrices.length - 1];
+        dynAvg = Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length);
+        const mid = Math.floor(validPrices.length / 2);
+        dynMed = validPrices.length % 2 !== 0 ? validPrices[mid] : Math.round((validPrices[mid - 1] + validPrices[mid]) / 2);
+        const q1Idx = Math.floor(validPrices.length * 0.25);
+        const q3Idx = Math.floor(validPrices.length * 0.75);
+        dynQ1 = validPrices[q1Idx];
+        dynQ3 = validPrices[q3Idx];
+        dynIqr = dynQ3 - dynQ1;
+      }
+
       const demandObs = rec.demand_signals || [];
       const cohortAll = (rec.cohorts && rec.cohorts['All Conditions']) || {};
       const ratio = cohortAll.wtb_wts_ratio !== undefined ? cohortAll.wtb_wts_ratio.toFixed(2) : ((rec.wts_count && rec.wts_count > 0) ? (rec.wtb_count / rec.wts_count).toFixed(2) : '0.00');
-      const avgP = cohortAll.avg_price ? `$${Math.round(cohortAll.avg_price).toLocaleString()}` : '$0';
-      const medP = cohortAll.median_price ? `$${Math.round(cohortAll.median_price).toLocaleString()}` : '$0';
-      const minP = cohortAll.min_price ? `$${Math.round(cohortAll.min_price).toLocaleString()}` : '$0';
-      const maxP = cohortAll.max_price ? `$${Math.round(cohortAll.max_price).toLocaleString()}` : '$0';
-      const q1P = cohortAll.q1 ? `$${Math.round(cohortAll.q1).toLocaleString()}` : '$0';
-      const q3P = cohortAll.q3 ? `$${Math.round(cohortAll.q3).toLocaleString()}` : '$0';
-      const iqrP = cohortAll.iqr ? `$${Math.round(cohortAll.iqr).toLocaleString()}` : '$0';
+      const avgP = dynAvg ? `$${dynAvg.toLocaleString()}` : (cohortAll.avg_price ? `$${Math.round(cohortAll.avg_price).toLocaleString()}` : '$0');
+      const medP = dynMed ? `$${dynMed.toLocaleString()}` : (cohortAll.median_price ? `$${Math.round(cohortAll.median_price).toLocaleString()}` : '$0');
+      const minP = dynMin ? `$${dynMin.toLocaleString()}` : (cohortAll.min_price ? `$${Math.round(cohortAll.min_price).toLocaleString()}` : '$0');
+      const maxP = dynMax ? `$${dynMax.toLocaleString()}` : (cohortAll.max_price ? `$${Math.round(cohortAll.max_price).toLocaleString()}` : '$0');
+      const q1P = dynQ1 ? `$${dynQ1.toLocaleString()}` : (cohortAll.q1 ? `$${Math.round(cohortAll.q1).toLocaleString()}` : '$0');
+      const q3P = dynQ3 ? `$${dynQ3.toLocaleString()}` : (cohortAll.q3 ? `$${Math.round(cohortAll.q3).toLocaleString()}` : '$0');
+      const iqrP = dynIqr ? `$${dynIqr.toLocaleString()}` : (cohortAll.iqr ? `$${Math.round(cohortAll.iqr).toLocaleString()}` : '$0');
 
       // Extract Forecast & Historical trend metrics
       const fc = rec.forecast || {
@@ -2986,7 +3002,7 @@
               <div class="text-[11px] font-bold uppercase tracking-wider text-[#9E6B38]">${rec.brand}</div>
               <h1 class="font-serif font-bold text-2xl md:text-3xl text-[#1C1917]">${rec.model} <span class="text-[#8A5826]">${rec.reference}</span></h1>
               <div class="text-xs text-[#6B7280] mt-1 flex items-center gap-2">
-                <span>${rec.total_observations.toLocaleString()} observations</span>
+                <span>${wtsObs.length > 0 ? wtsObs.length.toLocaleString() : (rec.total_observations || 0).toLocaleString()} observations</span>
                 <span>·</span>
                 <span class="px-2 py-0.5 rounded border text-[10px] font-bold font-mono ${dirColor}">${dirIcon} ${fc.trend_direction} (${fc.momentum_pct > 0 ? '+' : ''}${fc.momentum_pct}%)</span>
               </div>
@@ -3962,6 +3978,9 @@
 
     function feedPostIntoPriceResearch(post) {
       if (!post || !post.reference) return;
+      const cat = (post.category || '').toLowerCase();
+      if (cat === 'handbags' || cat === 'jewelry' || cat === 'accessories' || cat === 'other luxury') return;
+
       const cleanKey = post.reference.toLowerCase().replace(/[^a-zA-Z0-9]/g, '');
       const rec = researchIndex[cleanKey];
       if (!rec) return;
@@ -3970,6 +3989,13 @@
       const price = Number(post.price || post.price_usd || 0);
 
       if (isSale && price > 0) {
+        // Exclude duplicate dealer posts for the same ref, dial, and price
+        const isDup = rec.evidence_rows && rec.evidence_rows.some(r =>
+          (r.from_name === post.from_name || r.from_number === post.from_number) &&
+          r.dial === post.dial &&
+          Math.round(r.price || 0) === Math.round(price)
+        );
+        if (isDup) return;
         // 1. Prepend to qualified evidence rows (newest on top)
         if (!rec.evidence_rows) rec.evidence_rows = [];
         const alreadyIn = rec.evidence_rows.some(r => r.id === post.id);
