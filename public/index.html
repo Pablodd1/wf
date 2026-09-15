@@ -1289,14 +1289,9 @@
 
           <!-- Accommodated Raw Message Box (Left Column, LTR, Clickable) -->
           <details class="group rounded-xl border border-[#E5DACB] bg-[#F6F0E7] p-3 text-left">
-            <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
-              <div class="flex items-center gap-1.5">
-                <span class="transition-transform group-open:rotate-90">▶</span>
-                <span>Original raw broadcast message</span>
-              </div>
-              <button type="button" onclick="event.stopPropagation(); event.preventDefault(); if (window.currentAvailItemId) openBroadcastModal(window.currentAvailItemId);" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case font-semibold">
-                Full Modal ↗
-              </button>
+            <summary class="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+              <span class="transition-transform group-open:rotate-90">▶</span>
+              <span>Original raw broadcast message</span>
             </summary>
             <div id="availRawSnippet" class="mt-2.5 max-h-44 overflow-y-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words text-left custom-scrollbar" style="direction: ltr; text-align: left; unicode-bidi: isolate;"></div>
           </details>
@@ -1563,6 +1558,17 @@
     let sortedBrands = [];
     let catalogMeta = {};
     let auxiliaryLoaded = false;
+
+    // Buyer intent recognition regex: classifies WTB, LTB, NTQ, ISO, LF, "Need [ref]", "Looking for..." as buyer requests
+    const BUYER_INTENT_REGEX = /(?:^|\n|\b)(?:wtb|ltb|ntq|iso|lf|looking\s+for|looking\s+4|looking\s+to\s+buy|in\s+search\s+of|want\s+to\s+buy|wanted|buying|need\s+to\s+order|seeking)\b|(?:^|\n|\b)(?:need|needs|needing|needed)\s+(?!(?:(?:a|an|the|light|minor|quick|slight|small)\s+)?(?:polish|service|crystal|battery|link|links|bezel|clean|oil|buff|touch\s*up|detail|dial))\b/i;
+
+    function isItemWTB(item) {
+      if (!item) return false;
+      if (item.type === 'wtb' || item.type === 'search') return true;
+      const raw = (item.raw_message_clean || item.extracted_line || item.title || '').trim();
+      return BUYER_INTENT_REGEX.test(raw);
+    }
+    window.isItemWTB = isItemWTB;
 
     async function fetchCatalogData(relPath) {
       try {
@@ -2283,10 +2289,11 @@
         }
 
         // Listing type filter (OR logic within selected types: selecting both sale and wtb retains all)
-        if (!selectedListingTypes.has('all')) {
-          const isSale = item.type !== 'wtb' && item.type !== 'search';
+        if (!selectedListingTypes.has('all') && !currentSearch) {
+          const isWTB = isItemWTB(item);
+          const isSale = !isWTB;
           const matchSale = selectedListingTypes.has('sale') && isSale;
-          const matchWtb = selectedListingTypes.has('wtb') && !isSale;
+          const matchWtb = selectedListingTypes.has('wtb') && isWTB;
           if (!matchSale && !matchWtb) return false;
         }
 
@@ -2315,7 +2322,9 @@
           const cleanRef = rawRef.replace(/[^a-z0-9]/g, '');
           const nickStr = (item.nicknames || []).join(' ');
           const compStr = (item.completeness_tags || []).join(' ');
-          const hay = `${item.brand} ${item.model} ${rawRef} ${cleanRef} ${item.dial} ${item.category || ''} ${nickStr} ${compStr} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
+          const rawMsg = item.raw_message_clean || '';
+          const titleMsg = item.title || '';
+          const hay = `${item.brand} ${item.model} ${rawRef} ${cleanRef} ${item.dial} ${item.category || ''} ${nickStr} ${compStr} ${item.from_name} ${rawMsg} ${item.extracted_line || ''} ${titleMsg}`.toLowerCase();
           const cleanHay = hay.replace(/[^a-z0-9]/g, '');
           const matchesRaw = hay.includes(rawQ);
           const matchesClean = cleanQ.length > 2 && cleanHay.includes(cleanQ);
@@ -2350,7 +2359,7 @@
 
     function getListingDisplayTier(item) {
       const hasImage = Boolean(item.image_url && String(item.image_url).trim() !== '');
-      const isWTB = (item.type === 'wtb' || item.type === 'search');
+      const isWTB = isItemWTB(item);
       const hasPrice = Boolean(item.price && Number(item.price) > 0 && !isWTB);
       if (hasImage && hasPrice) return 1;
       if (hasImage && !hasPrice) return 2;
@@ -2466,9 +2475,7 @@
       const t = UI_TRANSLATIONS[currentAppLang] || UI_TRANSLATIONS.en;
 
       grid.innerHTML = pageItems.map(item => {
-        const rawText = (item.raw_message_clean || item.extracted_line || '').toLowerCase();
-        const isBuyerText = /\b(ntq|wtb|ltb|iso|looking to buy|need to order|want to buy)\b/i.test(rawText);
-        const isWTB = (item.type === 'wtb' || item.type === 'search' || isBuyerText);
+        const isWTB = isItemWTB(item);
         const isSale = !isWTB;
         const hasPrice = item.price && item.price > 0 && item.price <= 15000000;
         let formattedPrice = '';
@@ -2617,16 +2624,11 @@
                     </div>
                   ` : ''}
 
-                  <!-- Accommodated Clickable Raw Message (Left-to-Right LTR format, Collapsible preview, View in Modal) -->
+                  <!-- Accommodated Clickable Raw Message (Left-to-Right LTR format, Collapsible preview) -->
                   <details class="group mt-2.5 rounded-lg border border-[#E5DACB] bg-[#F6F0E7] p-2.5 text-left">
-                    <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
-                      <div class="flex items-center gap-1.5">
-                        <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
-                        <span>Original raw message</span>
-                      </div>
-                      <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case font-semibold">
-                        View untouched in modal ↗
-                      </button>
+                    <summary class="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                      <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
+                      <span>${isWTB ? 'Buyer Request Raw Text' : 'Original raw message'}</span>
                     </summary>
                     <div class="mt-2.5 max-h-48 overflow-y-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words text-left custom-scrollbar" style="direction: ltr; text-align: left; unicode-bidi: isolate;">
                       ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
@@ -2711,16 +2713,11 @@
               ` : ''}
             </div>
 
-            <!-- 3. Accommodated Clickable Raw Message (Left-to-Right LTR format, Collapsible preview, View in Modal) -->
+            <!-- 3. Accommodated Clickable Raw Message (Left-to-Right LTR format, Collapsible preview) -->
             <details class="group mt-3 rounded-lg border border-[#E5DACB] bg-[#F6F0E7] p-2.5 text-left">
-              <summary class="flex cursor-pointer list-none items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
-                <div class="flex items-center gap-1.5">
-                  <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
-                  <span>Original raw message</span>
-                </div>
-                <button type="button" onclick="event.stopPropagation(); event.preventDefault(); openBroadcastModal('${item.id}')" class="text-[10px] text-[#8A5826] hover:text-[#1C1917] underline normal-case font-semibold">
-                  View untouched in modal ↗
-                </button>
+              <summary class="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                <span aria-hidden="true" class="transition-transform group-open:rotate-90">▶</span>
+                <span>${isWTB ? 'Buyer Request Raw Text' : 'Original raw message'}</span>
               </summary>
               <div class="mt-2.5 max-h-48 overflow-y-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words text-left custom-scrollbar" style="direction: ltr; text-align: left; unicode-bidi: isolate;">
                 ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
@@ -2929,7 +2926,7 @@
         if (itRef !== cleanKey) return false;
         const cat = (it.category || '').toLowerCase();
         if (cat === 'handbags' || cat === 'jewelry' || cat === 'accessories' || cat === 'other luxury') return false;
-        return (it.type || 'wts').toLowerCase() !== 'wtb';
+        return !isItemWTB(it);
       }).map(it => ({
         id: it.id,
         brand: it.brand || rec.brand || '',
@@ -3685,9 +3682,10 @@
       if (!item) return;
 
       const t = UI_TRANSLATIONS[currentAppLang] || UI_TRANSLATIONS.en;
-      const isSale = item.type !== 'wtb' && item.type !== 'search';
+      const isWTB = isItemWTB(item);
+      const isSale = !isWTB;
       const hasPrice = item.price && item.price > 0;
-      const formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (isSale ? t.priceOnRequest : 'WTB');
+      const formattedPrice = hasPrice ? ('$' + Math.round(item.price).toLocaleString('en-US')) : (isSale ? t.priceOnRequest : (t.buyerRequest || 'WTB'));
       const cleanRef = item.reference && item.reference !== 'Uncataloged' ? item.reference : '';
       const fullBroadcast = (item.parent_id && broadcastsMap[item.parent_id]) || broadcastsMap[item.id] || item.extracted_line || 'No raw source broadcast attached.';
 
@@ -3794,14 +3792,16 @@
 
       // Inquiry Text Assistant
       const cleanPhone = (item.from_number || '').replace(/\D/g, '');
-      const defaultInquiry = `${t.inquiryGreeting}: ${item.brand} ${item.model} ${cleanRef} (${formattedPrice}). Is this piece currently available?`;
+      const defaultInquiry = isWTB
+        ? `${t.inquiryGreeting}: ${item.brand} ${item.model} ${cleanRef}. I saw your buyer request on Curated Luxury. Is this piece still needed?`
+        : `${t.inquiryGreeting}: ${item.brand} ${item.model} ${cleanRef} (${formattedPrice}). Is this piece currently available?`;
       const txt = document.getElementById('availInquiryText');
       txt.value = defaultInquiry;
 
       const btn = document.getElementById('availWhatsAppBtn');
       if (btn) {
         const span = btn.querySelector('span');
-        if (span) span.textContent = t.connectWhatsApp;
+        if (span) span.textContent = isWTB ? (t.connectBuyer || 'Connect with Buyer') : t.connectWhatsApp;
         if (cleanPhone) {
           btn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(defaultInquiry)}`;
           btn.classList.remove('opacity-50', 'pointer-events-none');
