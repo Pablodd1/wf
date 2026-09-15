@@ -1,4 +1,4 @@
-import { ExternalLink, MessageCircle } from 'lucide-react';
+import { ExternalLink, MapPin, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { LUXFI_URL } from './MarketHeader';
 
@@ -72,13 +72,36 @@ export function Footer() {
           </section>
         </div>
 
-        {/* Bottom Split: Brand Info & 3 Navigation Columns */}
-        <div className="grid gap-10 pt-12 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1fr_1fr]">
+        {/* Bottom Split: Brand Info, Headquarters & Navigation Columns */}
+        <div className="grid gap-10 pt-12 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr]">
           <div>
             <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-10 w-auto max-w-[210px] object-contain object-left" />
             <p className="mt-4 max-w-sm text-xs leading-relaxed text-white/45">
               Curated Luxury marketplace intelligence for exceptional objects.
             </p>
+
+            {/* Headquarters & Map */}
+            <div className="mt-6 rounded-lg border border-white/10 bg-[#0F0F17] p-4 text-xs">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#C9A96E]">
+                <MapPin size={13} />
+                <span>Global Headquarters</span>
+              </div>
+              <p className="mt-2 text-xs font-medium text-white/80 leading-snug">
+                14 NE 1st Ave #1102<br />
+                Miami, FL 33132
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <a
+                  href="https://maps.google.com/?q=14+NE+1st+Ave+%231102,+Miami,+FL+33132"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#C9A96E] hover:underline"
+                >
+                  <span>Open in Google Maps</span>
+                  <ExternalLink size={11} />
+                </a>
+              </div>
+            </div>
           </div>
 
           <nav aria-label="Trading & Research" className="flex flex-col gap-2.5 text-xs text-white/60">
@@ -100,15 +123,22 @@ export function Footer() {
 
           <nav aria-label="Company & Access" className="flex flex-col gap-2.5 text-xs text-white/60">
             <Link to="/cl-login" className="font-semibold text-[#C9A96E] transition-colors hover:text-white">CL Login</Link>
-            <Link to="/info/glossary" className="transition-colors hover:text-white">Glossary</Link>
+            <Link to="/info/glossary" className="transition-colors hover:text-white font-medium text-white/90">
+              Glossary & FAQ
+            </Link>
             <Link to="/info/company" className="transition-colors hover:text-white">Company</Link>
             <Link to="/info/community" className="transition-colors hover:text-white">Community</Link>
             <Link to="/info/privacy" className="transition-colors hover:text-white">Privacy</Link>
           </nav>
         </div>
 
-        <div className="mt-12 text-center text-xs text-white/35">
-          © 2026 Curated Luxury. All Rights Reserved.
+        <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-white/10 pt-6 text-xs text-white/35">
+          <div>
+            14 NE 1st Ave #1102, Miami, FL 33132 · United States
+          </div>
+          <div>
+            © 2026 Curated Luxury. All Rights Reserved.
+          </div>
         </div>
       </div>
     </footer>

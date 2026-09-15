@@ -1228,6 +1228,92 @@ export default function TradingFloor() {
         )}
 
       </div>
+
+      {/* Brand & Showcase Sections Before Footer */}
+      <section className="mx-auto max-w-7xl px-4 pt-10 pb-6">
+        {/* 1. Shop Your Favorite Brand Showcase */}
+        <div className="mb-10 rounded-2xl border border-[#E5DACB] bg-white p-6 sm:p-8 shadow-xs">
+          <div className="text-center mb-6">
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-[#1C1917]">
+              Shop Your Favorite Brand
+            </h2>
+            <p className="mt-2 text-xs sm:text-sm text-[#78716C]">
+              Direct access to curated inventory across the world's most prestigious horological houses and luxury ateliers.
+            </p>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-[#F0EAE1] bg-[#FAF8F5] p-3 sm:p-4">
+            <img
+              src="/images/shop-favorite-brands.png"
+              alt="Shop Your Favorite Brand - Rolex, Patek Philippe, Audemars Piguet, Richard Mille, Cartier, Omega"
+              className="w-full h-auto object-contain mx-auto max-h-[340px]"
+              loading="lazy"
+            />
+          </div>
+          {/* Quick Brand Navigation Chips */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-[#8A5826]">
+            {['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Omega', 'Hublot', 'Breitling', 'IWC', 'Panerai', 'Tudor', 'Hermès', 'Chopard', 'Bvlgari'].map(b => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => {
+                  updateViewParams({ brand: b, model: null });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="rounded-full border border-[#D7CCBC] bg-[#FAF6F0] px-3.5 py-1.5 hover:bg-[#EFE5D8] hover:border-[#9A7127] transition cursor-pointer"
+              >
+                {b}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 2. Hey, I'm Fi Companion Showcase Banner */}
+        <div className="overflow-hidden rounded-2xl border border-[#E5DACB] bg-[#F5EFEB] shadow-xs">
+          <div className="grid grid-cols-1 lg:grid-cols-12 items-center">
+            <div className="lg:col-span-7 p-6 sm:p-10">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-600/30 bg-emerald-50 px-3 py-1 text-[11px] font-mono text-emerald-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Fi is live — 1.3M+ listings captured</span>
+              </div>
+              <h2 className="mt-5 font-serif text-3xl sm:text-5xl font-bold tracking-tight text-[#1C1917] leading-tight">
+                Hey, I'm Fi.<br />
+                <span className="italic font-normal">I find the deal before anyone else.</span>
+              </h2>
+              <p className="mt-4 text-sm sm:text-base text-[#44403C] leading-relaxed max-w-xl">
+                I monitor your WhatsApp and Telegram dealer groups — watches, handbags, jewelry — and surface the match the moment it posts. <strong>$49.99/month</strong>. No per-match fees, ever.
+              </p>
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <a
+                  href="https://luxfi.ai/#add-fi"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-full bg-[#1C1917] px-6 py-3.5 text-xs font-bold text-white shadow-sm hover:bg-black transition"
+                >
+                  Message Fi
+                </a>
+                <a
+                  href="https://luxfi.ai/#add-fi"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-full border border-[#C5A059] bg-[#FAF6F0] px-6 py-3.5 text-xs font-bold text-[#8A5826] hover:bg-[#F4E8D7] transition"
+                >
+                  <span>Add Fi to my group</span>
+                  <span className="ml-1.5 text-sm">↗</span>
+                </a>
+              </div>
+            </div>
+            <div className="lg:col-span-5 p-4 sm:p-6 flex items-center justify-center">
+              <img
+                src="/images/fi-banner.png"
+                alt="Fi - AI Private Market Intelligence"
+                className="w-full h-auto object-contain rounded-xl shadow-md max-h-[380px]"
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
       <TradingFloorQuickScroll />
       <Footer />
     </main>
