@@ -610,18 +610,18 @@
   </header>
 
   <!-- 3. FLOATING HIRE FI TAB & QUICK SCROLL RAIL (RIGHT EDGE) -->
-  <aside class="fixed right-0 top-1/3 z-30 flex flex-col items-end pointer-events-none">
+  <aside class="fixed right-0 top-1/3 z-50 flex flex-col items-end pointer-events-none">
     <a
       href="https://luxfi.ai/#add-fi"
       target="_blank"
-      class="pointer-events-auto bg-[#12100E] text-[#D4B87A] border-l border-y border-[#3F3324] font-mono tracking-widest uppercase text-[10px] py-4 px-1.5 [writing-mode:vertical-rl] rounded-l-lg shadow-2xl cursor-pointer hover:bg-[#1C1917] transition-all"
+      class="pointer-events-auto bg-[#12100E] text-[#D4B87A] border-l border-y border-[#3F3324] font-mono tracking-[0.2em] uppercase text-[14px] py-8 px-3 [writing-mode:vertical-rl] rounded-l-lg shadow-2xl cursor-pointer hover:bg-[#1C1917] transition-all"
     >
       LET FI SEARCH THE WORLD
     </a>
   </aside>
 
   <!-- Floating Quick Scroll Rail -->
-  <div class="fixed right-3 bottom-8 z-30 flex flex-col items-center gap-1 bg-[#FAF6F0]/90 backdrop-blur border border-[#E5DACB] p-1.5 rounded-full shadow-lg">
+  <div class="fixed right-2 sm:right-3 bottom-8 z-40 flex flex-col items-center gap-1 bg-[#FAF6F0]/90 backdrop-blur border border-[#E5DACB] p-1.5 rounded-full shadow-lg">
     <button onclick="window.scrollTo({top:0, behavior:'smooth'})" class="w-6 h-6 flex items-center justify-center text-[#78716C] hover:text-[#1C1917] text-xs font-bold" title="Scroll to Top">
       ▲
     </button>
@@ -2431,7 +2431,7 @@
 
         if (viewMode === 'list') {
           return `
-            <article class="flex flex-col sm:flex-row rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md gap-5">
+            <article class="flex flex-col sm:flex-row rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md gap-5 min-w-0 overflow-hidden">
               <div class="w-full sm:w-56 h-56 shrink-0 overflow-hidden rounded-md bg-stone-100 cursor-pointer" onclick="openAvailabilityModal('${item.id}')">
                 ${item.image_url ? `
                   <img src="${item.image_url}" alt="${item.brand} ${item.model}" class="w-full h-full object-cover object-center transition hover:scale-105" loading="lazy" onerror="handleListingImageError(this)"/>
@@ -2486,7 +2486,7 @@
 
                   <!-- Literal Raw Message -->
                   <div class="mt-2.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-                    <div class="max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+                    <div class="max-h-48 overflow-auto overflow-x-hidden font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words" style="word-break:break-word;">
                       ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
                     </div>
                   </div>
@@ -2510,7 +2510,7 @@
         }
 
         return `
-          <article data-listing-id="${item.id}" class="flex flex-col rounded-xl border border-[#EBE3D5] bg-[#FAF6F0] p-3 sm:p-4 shadow-xs sm:shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <article data-listing-id="${item.id}" class="flex flex-col rounded-xl border border-[#EBE3D5] bg-[#FAF6F0] p-3 sm:p-4 shadow-xs sm:shadow-sm transition hover:-translate-y-0.5 hover:shadow-md min-w-0 overflow-hidden">
             <!-- 1. Top Image -->
             <button type="button" onclick="openAvailabilityModal('${item.id}')" class="block w-full overflow-hidden rounded-lg bg-stone-100 text-left cursor-pointer">
               ${item.image_url ? `
@@ -2571,7 +2571,7 @@
 
             <!-- 3. Literal Raw Message -->
             <div class="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-              <div class="max-h-48 overflow-auto font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+              <div class="max-h-48 overflow-auto overflow-x-hidden font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words" style="word-break:break-word;">
                 ${escapeHtml(item.raw_message_clean || item.extracted_line || fullBroadcast || 'No raw source attached.')}
               </div>
             </div>
