@@ -1915,7 +1915,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
             <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
             <span>{messageEvidence.label}</span>
           </summary>
-          <div className="mt-2.5 max-h-72 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+          <div className="mt-2.5 max-h-72 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900" style={{ wordBreak: 'break-word', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
             {messageEvidence.text}
           </div>
         </details>
@@ -2233,7 +2233,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                   <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
                   <span>{messageEvidence.label}</span>
                 </summary>
-                <div className="mt-2.5 max-h-96 overflow-auto rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap break-words">
+                <div className="mt-2.5 max-h-96 overflow-auto rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800" style={{ wordBreak: 'break-word', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}>
                   {messageEvidence.text}
                 </div>
               </details>
@@ -2613,20 +2613,7 @@ function TradingFloorQuickScroll() {
     };
   }, []);
   const scrollTo = (top: number) => window.scrollTo({ top, behavior: 'smooth' });
-  if (!scrollable) return null;
-  return (
-    <nav
-      aria-label="Quick Trading Floor scroll"
-      className="fixed right-3 top-1/2 z-[60] flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg sm:right-4 sm:p-1.5 lg:right-24 lg:p-2"
-      style={{ borderColor: BORDER }}
-    >
-      <button type="button" title="Top" aria-label="Scroll to top of Trading Floor" onClick={() => scrollTo(0)} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronUp size={18} /></button>
-      <div role="progressbar" aria-label="Trading Floor scroll position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)} className="my-1 h-16 w-1.5 overflow-hidden rounded-full sm:h-24 lg:h-28" style={{ background: PANEL }}>
-        <div className="w-full rounded-full" style={{ height: `${Math.max(8, progress * 100)}%`, background: GOLD }} />
-      </div>
-      <button type="button" title="Bottom" aria-label="Scroll to bottom of Trading Floor" onClick={() => scrollTo(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronDown size={18} /></button>
-    </nav>
-  );
+  return null;
 }
 
 function ratingUsdPrice(listing: ListingRecord) {

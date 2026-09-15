@@ -432,21 +432,43 @@ const ICONIC_REFS = {
   '99824': 'JAEGER-LECOULTRE', '99825': 'JAEGER-LECOULTRE',
 };
 
+const REVERSE_LOOKUP_DICT = {
+  '15202': 'AUDEMARS PIGUET',
+  '15202ST': 'AUDEMARS PIGUET',
+  '15300': 'AUDEMARS PIGUET',
+  '15400': 'AUDEMARS PIGUET',
+  '15500': 'AUDEMARS PIGUET',
+  '15510': 'AUDEMARS PIGUET',
+  '16202': 'AUDEMARS PIGUET',
+  '26240': 'AUDEMARS PIGUET',
+  '26400': 'AUDEMARS PIGUET',
+  '26470': 'AUDEMARS PIGUET',
+  '50535': 'ROLEX',
+  '118235': 'ROLEX',
+  '118238': 'ROLEX',
+  '179171': 'ROLEX',
+  '279171': 'ROLEX',
+  'WJPN0094': 'CARTIER',
+  '17-01': 'RICHARD MILLE',
+  '35-03': 'RICHARD MILLE',
+};
+
 function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase();
-  // Check exact iconic refs first
+  // Reverse lookup dictionary check
+  for (const [code, brandName] of Object.entries(REVERSE_LOOKUP_DICT)) {
+    if (r === code || r.startsWith(code)) return brandName;
+  }
+  // Check exact iconic refs
   for (const [prefix, brand] of Object.entries(ICONIC_REFS)) {
     if (r.startsWith(prefix)) return brand;
   }
   // Pattern-based inference
   if (/^\d{4}\/\d/.test(r)) return 'PATEK PHILIPPE';
-  if (/^RM\d/.test(r)) return 'RICHARD MILLE';
-  if (/^126\d{5}/.test(r)) return 'ROLEX';
-  if (/^116\d{5}/.test(r)) return 'ROLEX';
-  if (/^228\d{5}/.test(r)) return 'ROLEX';
-  if (/^124\d{5}/.test(r)) return 'ROLEX';
-  if (/^136\d{5}/.test(r)) return 'ROLEX';
+  if (/^RM\d/i.test(r) || /^\d{2}-\d{2}$/.test(r)) return 'RICHARD MILLE';
+  if (/^(?:CR)?W[A-Z0-9]{5,9}$/i.test(r)) return 'CARTIER';
+  if (/^(?:1[12][46]\d{3}|1[12]8\d{3}|228\d{3}|124\d{3}|136\d{3}|[12]79\d{3}|505\d{2}|166\d{2}|167\d{2}|162\d{2}|180\d{2}|182\d{2}|14060|1652[038])/i.test(r)) return 'ROLEX';
   if (/^155\d{2}/.test(r)) return 'AUDEMARS PIGUET';
   if (/^157\d{2}/.test(r)) return 'AUDEMARS PIGUET';
   if (/^262\d{2}/.test(r)) return 'AUDEMARS PIGUET';
@@ -726,52 +748,105 @@ function regexExtract(text) {
   else if (/\bf\.p\.\s*journe\b|fpj\b/.test(lower)) brand = 'F.P. Journe';
   else if (/\bmb&f\b|maximilian/.test(lower)) brand = 'MB&F';
 
-  const rmMatch = text.match(/\bRM\s?\d{2,3}(?:[-\s]?\d{2})?[A-Z]*\b/i);
-  const ppMatch = text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i);
-  // AP: handle 'AP26650ti' (no space) and '26650ti' (with word boundary)
-  const apMatch = text.match(/\b(?:AP)?\s*(\d{5}[A-Z]{2,4})\b/i);
-  const rolexMatch = text.match(/\b\d{6}[A-Z]{0,4}\b/i);
-  const parmigianiMatch = text.match(/\bPFC\d{3,4}[-.]\d{7,10}[-.]?\d{0,6}\b/i);
-  const jlcMatch = text.match(/\bQ?\d{6}[A-Z]{0,4}\b/i);
-  // VC: 4-5 digits + optional letters (e.g., 82035, 4300V)
-  const vcMatch = text.match(/\b\d{4,5}[A-Z]{0,2}\b/i);
-  const omegaMatch = text.match(/\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/);
-  const cartierMatch = text.match(/\bW[A-Z0-9]{7}\b/i);
-  const tudorMatch = text.match(/\b(?:M)?(?:7|2|4|8|9)\d{4}[A-Z]{0,2}(?:-\d{4})?\b/i);
-  const tagMatch = text.match(/\b[A-Z]{3,4}\d{4}[A-Z]?[-.][A-Z0-9]+\b/i);
+  // =========================================================================
+  // 1. ISOLATE AND EXTRACT PRICES FIRST (Blocker 4)
+  // =========================================================================
+  const priceValues = [];
+  
+  // Prefix currency: $56,500, USD 56500, €45,000, etc.
+  const prefixPriceMatches = text.matchAll(/(?:[\$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP)\b)\s*([\d,]+(?:\.\d{1,2})?)\s*([kKmM])?\b/gi);
+  for (const m of prefixPriceMatches) {
+    let num = parseFloat(m[1].replace(/,/g, ''));
+    if (m[2] && m[2].toLowerCase() === 'k') num *= 1000;
+    else if (m[2] && m[2].toLowerCase() === 'm') num *= 1000000;
+    if (num > 0) priceValues.push(Math.round(num));
+  }
+  
+  // Suffix currency / k-multiplier: 56.5k, 56500 usd, 56500 usdt
+  const suffixPriceMatches = text.matchAll(/\b([\d,]+(?:\.\d{1,2})?)\s*([kKmM])?\s*(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|[\$€£¥￥])\b/gi);
+  for (const m of suffixPriceMatches) {
+    let num = parseFloat(m[1].replace(/,/g, ''));
+    if (m[2] && m[2].toLowerCase() === 'k') num *= 1000;
+    else if (m[2] && m[2].toLowerCase() === 'm') num *= 1000000;
+    if (num > 0) priceValues.push(Math.round(num));
+  }
+  
+  // Standalone 'k' notation: 56.5k, 515K
+  const kMatches = text.matchAll(/\b(\d{1,3}(?:\.\d{1,2})?)\s*[kK]\b/g);
+  for (const m of kMatches) {
+    priceValues.push(Math.round(parseFloat(m[1]) * 1000));
+  }
+  
+  // Standalone round numbers that look like prices (e.g. 56500, 108500)
+  const roundMatches = text.matchAll(/\b(\d{4,6})\b/g);
+  for (const m of roundMatches) {
+    const val = parseInt(m[1], 10);
+    if ((val % 100 === 0 || val % 50 === 0) && val >= 1000 && !(val >= 1980 && val <= 2030)) {
+      priceValues.push(val);
+    }
+  }
 
-  // Price detection FIRST — so we can exclude price-looking numbers from ref candidates
-  const kM = text.match(/\b(\d{1,3}(?:\.\d{1,2})?)\s?[kK]\b/);
-  let kPrice = null;
-  if (kM) kPrice = Math.round(parseFloat(kM[1]) * 1000);
-  const pM = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
-  let explicitPrice = null;
-  if (pM) explicitPrice = parseInt(pM[1].replace(/,/g, ''), 10);
+  const explicitPrice = priceValues.length > 0 ? priceValues[0] : null;
+  const kPrice = priceValues.find(p => p >= 1000 && p % 1000 === 0) || null;
 
-  // Build ref candidates, filtering out price-looking numbers
+  // Create a clean text with price tokens stripped so prices don't become references
+  let textForRef = text
+    .replace(/(?:[\$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP)\b)\s*[\d,]+(?:\.\d{1,2})?\s*[kKmM]?\b/gi, ' ')
+    .replace(/\b[\d,]+(?:\.\d{1,2})?\s*[kKmM]?\s*(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|[\$€£¥￥])\b/gi, ' ')
+    .replace(/\b\d{1,3}(?:\.\d{1,2})?\s*[kK]\b/g, ' ');
+
+  // =========================================================================
+  // 2. CANDIDATE REFERENCE EXTRACTION (Blocker 5: RM, Cartier, Rolex, AP)
+  // =========================================================================
+  // RM lenient: matches 'RM 35-03', 'RM35-03', and bare '35-03', '17-01'
+  const rmMatch = textForRef.match(/\b(?:RM\s*)?(\d{2,3}-\d{2})\b/i) || textForRef.match(/\bRM\s?\d{2,3}(?:[-\s]?\d{2})?[A-Z]*\b/i);
+  const ppMatch = textForRef.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i);
+  // AP: handle 15202ST, 15400ST, 26240ST, 26400SO, etc.
+  const apMatch = textForRef.match(/\b(?:AP\s*)?((?:15[2-5]|162|26[2-5]|77[34])\d{2}[A-Z]{2,4})\b/i) || textForRef.match(/\b(?:AP)?\s*(\d{5}[A-Z]{2,4})\b/i);
+  // Rolex: 5-digit and 6-digit references plus Cellini and Day-Date (118235, 50535, 179171, 16610)
+  const rolexMatch = textForRef.match(/\b(?:1[12][46]\d{3}[A-Z]{0,4}|1[12]8\d{3}[A-Z]{0,4}|228\d{3}[A-Z]{0,4}|124\d{3}[A-Z]{0,4}|136\d{3}[A-Z]{0,4}|[12]79\d{3}[A-Z]{0,4}|505\d{2}[A-Z]{0,2}|166\d{2}[A-Z]{0,2}|167\d{2}[A-Z]{0,2}|162\d{2}[A-Z]{0,2}|180\d{2}[A-Z]{0,2}|182\d{2}[A-Z]{0,2}|14060[A-Z]{0,2}|1652[038][A-Z]{0,2})\b/i);
+  const parmigianiMatch = textForRef.match(/\bPFC\d{3,4}[-.]\d{7,10}[-.]?\d{0,6}\b/i);
+  const jlcMatch = textForRef.match(/\bQ?\d{6}[A-Z]{0,4}\b/i);
+  const vcMatch = textForRef.match(/\b\d{4,5}[A-Z]{0,2}\b/i);
+  const omegaMatch = textForRef.match(/\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/);
+  // Cartier: Match W or CRW references (e.g. WSSA0029, WJPN0094, W6920002)
+  const cartierMatch = textForRef.match(/\b(?:CR)?W[A-Z0-9]{5,9}\b/i);
+  const tudorMatch = textForRef.match(/\b(?:M)?(?:7|2|4|8|9)\d{4}[A-Z]{0,2}(?:-\d{4})?\b/i);
+  const tagMatch = textForRef.match(/\b[A-Z]{3,4}\d{4}[A-Z]?[-.][A-Z0-9]+\b/i);
+  const zenithMatch = textForRef.match(/\b\d{2}\.\d{4}\.\d{3,4}(?:\/\d{2,4}\.[A-Z0-9.]+)?\b/i);
+
+  // Build ref candidates
   const candidates = [];
-  if (rmMatch) candidates.push({ ref: rmMatch[0].toUpperCase().replace(/\s/g, ''), source: 'rm' });
+  if (rmMatch) {
+    let rCode = (rmMatch[1] || rmMatch[0]).toUpperCase().replace(/\s/g, '');
+    if (/^\d{2}-\d{2}$/.test(rCode)) rCode = `RM ${rCode}`;
+    candidates.push({ ref: rCode, source: 'rm' });
+  }
   if (parmigianiMatch) candidates.push({ ref: parmigianiMatch[0].toUpperCase(), source: 'parmigiani' });
   if (ppMatch) candidates.push({ ref: ppMatch[0].toUpperCase(), source: 'pp' });
-  if (apMatch) candidates.push({ ref: apMatch[1].toUpperCase(), source: 'ap' });
+  if (apMatch) candidates.push({ ref: (apMatch[1] || apMatch[0]).toUpperCase(), source: 'ap' });
   if (rolexMatch) candidates.push({ ref: rolexMatch[0].toUpperCase(), source: 'rolex' });
+  if (cartierMatch) candidates.push({ ref: cartierMatch[0].toUpperCase(), source: 'cartier' });
   if (jlcMatch) candidates.push({ ref: jlcMatch[0].toUpperCase(), source: 'jlc' });
   if (vcMatch && brand === 'Vacheron Constantin') candidates.push({ ref: vcMatch[0].toUpperCase(), source: 'vc' });
   if (omegaMatch) candidates.push({ ref: omegaMatch[0], source: 'omega' });
-  if (cartierMatch) candidates.push({ ref: cartierMatch[0].toUpperCase(), source: 'cartier' });
   if (tudorMatch) candidates.push({ ref: tudorMatch[0].toUpperCase(), source: 'tudor' });
   if (tagMatch) candidates.push({ ref: tagMatch[0].toUpperCase(), source: 'tag' });
-    if (zenithMatch) candidates.push({ ref: zenithMatch[0].toUpperCase(), source: 'zenith' });
+  if (zenithMatch) candidates.push({ ref: zenithMatch[0].toUpperCase(), source: 'zenith' });
 
-  // Filter: reject candidates that are just the explicit price or K-price
+  // Filter: reject candidates that match explicit price or any detected price value
   const validCandidates = candidates.filter(c => {
-    const numOnly = parseInt(c.ref.replace(/\D/g, ''), 10);
-    if (explicitPrice && numOnly === explicitPrice) return false;
-    if (kPrice && numOnly === kPrice) return false;
+    const digitsOnly = c.ref.replace(/\D/g, '');
+    const numOnly = digitsOnly ? parseInt(digitsOnly, 10) : null;
+    if (numOnly !== null) {
+      if (priceValues.includes(numOnly)) return false;
+      if (explicitPrice && numOnly === explicitPrice) return false;
+      if (kPrice && numOnly === kPrice) return false;
+    }
     // Reject if it looks like a year (2015-2026) + suffix
-    if (/^20[12]\d[A-Z]+$/.test(c.ref)) return false;
-    // Reject if it's just digits 4-6 chars with no letters (likely price)
-    if (/^\d{4,6}$/.test(c.ref) && explicitPrice) return false;
+    if (/^20[12]\d[A-Z]*$/.test(c.ref)) return false;
+    // Reject if it's just digits with no letters and matches a price
+    if (/^\d{4,6}$/.test(c.ref) && priceValues.some(p => p === parseInt(c.ref, 10))) return false;
     return true;
   });
 
@@ -779,13 +854,14 @@ function regexExtract(text) {
     ref = validCandidates[0].ref;
   }
 
-  // Fallback: generic match only if no specific match and not a price
+  // Fallback: generic match only if no specific match and NOT a price
   if (!ref) {
-    const genericMatch = text.match(/\b\d{4,6}[\/\s-]?\d?[A-Z]{1,4}\b/i);
+    const genericMatch = textForRef.match(/\b\d{4,6}[\/\s-]?\d?[A-Z]{1,4}\b/i);
     if (genericMatch) {
       const gRef = genericMatch[0].toUpperCase();
-      const gNum = parseInt(gRef.replace(/\D/g, ''), 10);
-      if ((!explicitPrice || gNum !== explicitPrice) && (!kPrice || gNum !== kPrice) && !/^20[12]\d[A-Z]+$/.test(gRef)) {
+      const gDigits = gRef.replace(/\D/g, '');
+      const gNum = gDigits ? parseInt(gDigits, 10) : null;
+      if (!gNum || (!priceValues.includes(gNum) && !/^20[12]\d[A-Z]*$/.test(gRef))) {
         ref = gRef;
       }
     }
@@ -794,6 +870,10 @@ function regexExtract(text) {
   // Infer brand from reference if not found
   if (!brand && ref) {
     brand = inferBrandFromRef(ref);
+  }
+  // Safety guard: Brand must NEVER be purely numeric (e.g. '56500')
+  if (brand && /^\d+$/.test(brand.trim())) {
+    brand = null;
   }
 
   const dialM = text.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|mop|mother\s*of\s*pearl|meteorite|diamond|gemset|rainbow|multi[\s-]?color|panda|hulk|tiffany|onyx|root\s*beer|cognac|ice\s*blue)\b/i);
