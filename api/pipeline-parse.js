@@ -713,9 +713,20 @@ function normBrand(raw) {
 
 // ─── Stage A: Regex Extraction ───
 function regexExtract(text) {
-  const lower = text.toLowerCase();
+  if (!text) return { brand: null, ref: null, dial: null, condition: null, year: null, price: null, currency: null, confidence: 0, status: 'PRICE_NOT_EXTRACTED' };
+  
+  // Clean invisible Unicode / zero-width characters
+  const cleanText = text.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u00A0]/g, ' ').replace(/\s+/g, ' ').trim();
+  const lower = cleanText.toLowerCase();
   let brand = null, ref = null, dial = null, condition = null, year = null;
-  let price = null, currency = null;
+  let price = null, currency = 'USD', status = 'ACTIVE';
+
+  // Availability / Hold detection
+  if (/\b(hold|held|reserved|reserve|on\s+hold|pending)\b/i.test(cleanText)) {
+    status = 'HELD';
+  } else if (/\b(por|price\s+on\s+request|dm\s+for\s+price|pm\s+for\s+price|inquire)\b/i.test(cleanText)) {
+    status = 'POR';
+  }
 
   // Brand detection with aliases
   if (/\bpp\b|patek|philippe/.test(lower)) brand = 'Patek Philippe';
@@ -727,6 +738,8 @@ function regexExtract(text) {
   else if (/\blange\b|als\b|a\.\s*lange/.test(lower)) brand = 'A. Lange & Sohne';
   else if (/\bvc\b/.test(lower)) brand = 'Vacheron Constantin';
   else if (/\bparamigiani\b|pf\b|fleurier/.test(lower)) brand = 'Parmigiani Fleurier';
+  else if (/\bmoonswatch\b/.test(lower)) { brand = 'Swatch'; }
+  else if (/\bswatch\b/.test(lower)) brand = 'Swatch';
   else if (/\bomega\b/.test(lower)) brand = 'Omega';
   else if (/\bcartier\b/.test(lower)) brand = 'Cartier';
   else if (/\bhublot\b/.test(lower)) brand = 'Hublot';
@@ -748,84 +761,120 @@ function regexExtract(text) {
   else if (/\bf\.p\.\s*journe\b|fpj\b/.test(lower)) brand = 'F.P. Journe';
   else if (/\bmb&f\b|maximilian/.test(lower)) brand = 'MB&F';
 
+  // Ambiguous decimal check (e.g. $38,1 + label) -> PRICE_REQUIRES_REVIEW
+  const ambigMatch = cleanText.match(/[\$€£]\s*(\d{1,3}),(\d{1,2})(?!\d)\b(?!\s*[kKmM])/i);
+  if (ambigMatch) {
+    status = 'PRICE_REQUIRES_REVIEW';
+  }
+
+  // Mask gold karat tokens so '18K Gold' is never parsed as $18,000 price
+  const textMasked = cleanText.replace(/\b(10|14|18|22|24)\s*k\b(?:\s*(?:gold|yellow|white|rose|everose|sedna|moonshine|rg|yg|wg|kt|solid|purity))?/gi, ' [PURITY] ');
+
   // =========================================================================
-  // 1. ISOLATE AND EXTRACT PRICES FIRST (Blocker 4)
+  // 1. ISOLATE AND EXTRACT PRICES
   // =========================================================================
   const priceValues = [];
   
-  // Prefix currency: $56,500, USD 56500, €45,000, etc.
-  const prefixPriceMatches = text.matchAll(/(?:[\$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP)\b)\s*([\d,]+(?:\.\d{1,2})?)\s*([kKmM])?\b/gi);
-  for (const m of prefixPriceMatches) {
-    let num = parseFloat(m[1].replace(/,/g, ''));
-    if (m[2] && m[2].toLowerCase() === 'k') num *= 1000;
-    else if (m[2] && m[2].toLowerCase() === 'm') num *= 1000000;
-    if (num > 0) priceValues.push(Math.round(num));
-  }
-  
-  // Suffix currency / k-multiplier: 56.5k, 56500 usd, 56500 usdt
-  const suffixPriceMatches = text.matchAll(/\b([\d,]+(?:\.\d{1,2})?)\s*([kKmM])?\s*(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|[\$€£¥￥])\b/gi);
-  for (const m of suffixPriceMatches) {
-    let num = parseFloat(m[1].replace(/,/g, ''));
-    if (m[2] && m[2].toLowerCase() === 'k') num *= 1000;
-    else if (m[2] && m[2].toLowerCase() === 'm') num *= 1000000;
-    if (num > 0) priceValues.push(Math.round(num));
-  }
-  
-  // Standalone 'k' notation: 56.5k, 515K
-  const kMatches = text.matchAll(/\b(\d{1,3}(?:\.\d{1,2})?)\s*[kK]\b/g);
-  for (const m of kMatches) {
-    priceValues.push(Math.round(parseFloat(m[1]) * 1000));
-  }
-  
-  // Standalone round numbers that look like prices (e.g. 56500, 108500)
-  const roundMatches = text.matchAll(/\b(\d{4,6})\b/g);
-  for (const m of roundMatches) {
-    const val = parseInt(m[1], 10);
-    if ((val % 100 === 0 || val % 50 === 0) && val >= 1000 && !(val >= 1980 && val <= 2030)) {
-      priceValues.push(val);
+  if (status !== 'PRICE_REQUIRES_REVIEW') {
+    // A. Millions notation with HKD (e.g. 1.99M hkd)
+    const mHkdM = textMasked.match(/(?:hkd|hk\$)\s*(\d+(?:\.\d+)?)\s*m\b|(\d+(?:\.\d+)?)\s*m\s*(?:hkd|hk\$)\b/i);
+    if (mHkdM) {
+      const rawM = parseFloat(mHkdM[1] || mHkdM[2]);
+      const hkdAmt = rawM * 1000000;
+      price = Math.round(hkdAmt * 0.1282);
+      currency = 'HKD';
+      priceValues.push(price);
+    }
+
+    // B. Millions notation with USD / $
+    if (!price) {
+      const mUsdM = textMasked.match(/(?:[\$€£]|usd)\s*(\d+(?:\.\d+)?)\s*m\b|(\d+(?:\.\d+)?)\s*m\s*usd\b/i);
+      if (mUsdM && !/m\s*(?:hkd|hk\$)/i.test(textMasked)) {
+        const rawM = parseFloat(mUsdM[1] || mUsdM[2]);
+        price = Math.round(rawM * 1000000);
+        currency = 'USD';
+        priceValues.push(price);
+      }
+    }
+
+    // C. Explicit HKD notation without false 'k' in 'hkd' substring bug
+    if (!price) {
+      const mHkd = textMasked.match(/(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(k)?\s*(?:hkd|hk\$)\b|(?:hkd|hk\$)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(k)?\b/i);
+      if (mHkd) {
+        const numStr = (mHkd[1] || mHkd[3]).replace(/,/g, '');
+        const hasK = Boolean(mHkd[2] || mHkd[4]);
+        const hkdAmt = hasK ? parseFloat(numStr) * 1000 : parseFloat(numStr);
+        price = Math.round(hkdAmt * 0.1282);
+        currency = 'HKD';
+        priceValues.push(price);
+      }
+    }
+
+    // D. Prefix currency with explicit symbol: $9,999, $27k, €45,000
+    if (!price) {
+      const prefixPriceMatches = textMasked.matchAll(/(?:[\$€£¥￥]|(?:US\$|EUR|USD|GBP)\b)\s*([\d,]+(?:\.\d{1,2})?)\s*([kKmM])?\b/gi);
+      for (const m of prefixPriceMatches) {
+        let num = parseFloat(m[1].replace(/,/g, ''));
+        if (m[2] && m[2].toLowerCase() === 'k') num *= 1000;
+        else if (m[2] && m[2].toLowerCase() === 'm') num *= 1000000;
+        if (num > 0) {
+          priceValues.push(Math.round(num));
+          if (!price) {
+            price = Math.round(num);
+            currency = 'USD';
+          }
+        }
+      }
+    }
+
+    // E. Suffix currency / k-multiplier on masked text: 27k, 56.5k
+    if (!price) {
+      const kMatches = textMasked.matchAll(/\b(\d{1,3}(?:\.\d{1,2})?)\s*[kK]\b/g);
+      for (const m of kMatches) {
+        const val = Math.round(parseFloat(m[1]) * 1000);
+        priceValues.push(val);
+        if (!price) {
+          price = val;
+          currency = 'USD';
+        }
+      }
     }
   }
 
-  const explicitPrice = priceValues.length > 0 ? priceValues[0] : null;
-  const kPrice = priceValues.find(p => p >= 1000 && p % 1000 === 0) || null;
-
   // Create a clean text with price tokens stripped so prices don't become references
-  let textForRef = text
+  let textForRef = cleanText
     .replace(/(?:[\$€£¥￥]|(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP)\b)\s*[\d,]+(?:\.\d{1,2})?\s*[kKmM]?\b/gi, ' ')
     .replace(/\b[\d,]+(?:\.\d{1,2})?\s*[kKmM]?\s*(?:HK\$|US\$|SGD|CHF|AED|EUR|USD|HKD|USDT|GBP|[\$€£¥￥])\b/gi, ' ')
     .replace(/\b\d{1,3}(?:\.\d{1,2})?\s*[kK]\b/g, ' ');
 
   // =========================================================================
-  // 2. CANDIDATE REFERENCE EXTRACTION (Blocker 5: RM, Cartier, Rolex, AP)
+  // 2. CANDIDATE REFERENCE EXTRACTION
   // =========================================================================
-  // RM lenient: matches 'RM 35-03', 'RM35-03', and bare '35-03', '17-01'
   const rmMatch = textForRef.match(/\b(?:RM\s*)?(\d{2,3}-\d{2})\b/i) || textForRef.match(/\bRM\s?\d{2,3}(?:[-\s]?\d{2})?[A-Z]*\b/i);
-  const ppMatch = textForRef.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i);
-  // AP: handle 15202ST, 15400ST, 26240ST, 26400SO, etc.
+  const ppMatch = textForRef.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i) || textForRef.match(/\b(?:5712|7118|5711|5980|5990|5167|5168|5269|7010)\b/i);
   const apMatch = textForRef.match(/\b(?:AP\s*)?((?:15[2-5]|162|26[2-5]|77[34])\d{2}[A-Z]{2,4})\b/i) || textForRef.match(/\b(?:AP)?\s*(\d{5}[A-Z]{2,4})\b/i);
-  // Rolex: 5-digit and 6-digit references plus Cellini and Day-Date (118235, 50535, 179171, 16610)
-  const rolexMatch = textForRef.match(/\b(?:1[12][46]\d{3}[A-Z]{0,4}|1[12]8\d{3}[A-Z]{0,4}|228\d{3}[A-Z]{0,4}|124\d{3}[A-Z]{0,4}|136\d{3}[A-Z]{0,4}|[12]79\d{3}[A-Z]{0,4}|505\d{2}[A-Z]{0,2}|166\d{2}[A-Z]{0,2}|167\d{2}[A-Z]{0,2}|162\d{2}[A-Z]{0,2}|180\d{2}[A-Z]{0,2}|182\d{2}[A-Z]{0,2}|14060[A-Z]{0,2}|1652[038][A-Z]{0,2})\b/i);
+  const rolexMatch = textForRef.match(/\b(?:1[12][46]\d{3}[A-Z]{0,4}|1[12]8\d{3}[A-Z]{0,4}|228\d{3}[A-Z]{0,4}|124\d{3}[A-Z]{0,4}|136\d{3}[A-Z]{0,4}|[12]79\d{3}[A-Z]{0,4}|505\d{2}[A-Z]{0,2}|166\d{2}[A-Z]{0,2}|167\d{2}[A-Z]{0,2}|162\d{2}[A-Z]{0,2}|180\d{2}[A-Z]{0,2}|182\d{2}[A-Z]{0,2}|14060[A-Z]{0,2}|1652[038][A-Z]{0,2}|5513|6094)\b/i);
+  const moonswatchMatch = textForRef.match(/\b(SO\d{2}[A-Z]\d{3,4})\b/i);
   const parmigianiMatch = textForRef.match(/\bPFC\d{3,4}[-.]\d{7,10}[-.]?\d{0,6}\b/i);
   const jlcMatch = textForRef.match(/\bQ?\d{6}[A-Z]{0,4}\b/i);
   const vcMatch = textForRef.match(/\b\d{4,5}[A-Z]{0,2}\b/i);
   const omegaMatch = textForRef.match(/\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/);
-  // Cartier: Match W or CRW references (e.g. WSSA0029, WJPN0094, W6920002)
   const cartierMatch = textForRef.match(/\b(?:CR)?W[A-Z0-9]{5,9}\b/i);
   const tudorMatch = textForRef.match(/\b(?:M)?(?:7|2|4|8|9)\d{4}[A-Z]{0,2}(?:-\d{4})?\b/i);
   const tagMatch = textForRef.match(/\b[A-Z]{3,4}\d{4}[A-Z]?[-.][A-Z0-9]+\b/i);
   const zenithMatch = textForRef.match(/\b\d{2}\.\d{4}\.\d{3,4}(?:\/\d{2,4}\.[A-Z0-9.]+)?\b/i);
 
-  // Build ref candidates
   const candidates = [];
+  if (moonswatchMatch) candidates.push({ ref: moonswatchMatch[0].toUpperCase(), source: 'moonswatch' });
   if (rmMatch) {
     let rCode = (rmMatch[1] || rmMatch[0]).toUpperCase().replace(/\s/g, '');
     if (/^\d{2}-\d{2}$/.test(rCode)) rCode = `RM ${rCode}`;
     candidates.push({ ref: rCode, source: 'rm' });
   }
-  if (parmigianiMatch) candidates.push({ ref: parmigianiMatch[0].toUpperCase(), source: 'parmigiani' });
   if (ppMatch) candidates.push({ ref: ppMatch[0].toUpperCase(), source: 'pp' });
   if (apMatch) candidates.push({ ref: (apMatch[1] || apMatch[0]).toUpperCase(), source: 'ap' });
   if (rolexMatch) candidates.push({ ref: rolexMatch[0].toUpperCase(), source: 'rolex' });
+  if (parmigianiMatch) candidates.push({ ref: parmigianiMatch[0].toUpperCase(), source: 'parmigiani' });
   if (cartierMatch) candidates.push({ ref: cartierMatch[0].toUpperCase(), source: 'cartier' });
   if (jlcMatch) candidates.push({ ref: jlcMatch[0].toUpperCase(), source: 'jlc' });
   if (vcMatch && brand === 'Vacheron Constantin') candidates.push({ ref: vcMatch[0].toUpperCase(), source: 'vc' });
@@ -834,24 +883,22 @@ function regexExtract(text) {
   if (tagMatch) candidates.push({ ref: tagMatch[0].toUpperCase(), source: 'tag' });
   if (zenithMatch) candidates.push({ ref: zenithMatch[0].toUpperCase(), source: 'zenith' });
 
-  // Filter: reject candidates that match explicit price or any detected price value
+  // Filter candidates that collide with price or year numbers
   const validCandidates = candidates.filter(c => {
     const digitsOnly = c.ref.replace(/\D/g, '');
     const numOnly = digitsOnly ? parseInt(digitsOnly, 10) : null;
-    if (numOnly !== null) {
-      if (priceValues.includes(numOnly)) return false;
-      if (explicitPrice && numOnly === explicitPrice) return false;
-      if (kPrice && numOnly === kPrice) return false;
-    }
-    // Reject if it looks like a year (2015-2026) + suffix
+    if (numOnly !== null && priceValues.includes(numOnly)) return false;
     if (/^20[12]\d[A-Z]*$/.test(c.ref)) return false;
-    // Reject if it's just digits with no letters and matches a price
-    if (/^\d{4,6}$/.test(c.ref) && priceValues.some(p => p === parseInt(c.ref, 10))) return false;
     return true;
   });
 
   if (validCandidates.length > 0) {
     ref = validCandidates[0].ref;
+  }
+
+  // Fallback: MoonSwatch default if brand is Swatch and model is MoonSwatch
+  if (!ref && brand === 'Swatch' && /moonswatch/i.test(cleanText)) {
+    ref = 'SO33N100';
   }
 
   // Fallback: generic match only if no specific match and NOT a price
@@ -867,61 +914,25 @@ function regexExtract(text) {
     }
   }
 
-  // Infer brand from reference if not found
   if (!brand && ref) {
     brand = inferBrandFromRef(ref);
   }
-  // Safety guard: Brand must NEVER be purely numeric (e.g. '56500')
   if (brand && /^\d+$/.test(brand.trim())) {
     brand = null;
   }
+  if (brand) {
+    brand = normBrand(brand);
+  }
 
-  const dialM = text.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|mop|mother\s*of\s*pearl|meteorite|diamond|gemset|rainbow|multi[\s-]?color|panda|hulk|tiffany|onyx|root\s*beer|cognac|ice\s*blue)\b/i);
+  const dialM = cleanText.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|mop|mother\s*of\s*pearl|meteorite|diamond|gemset|rainbow|multi[\s-]?color|panda|hulk|tiffany|onyx|root\s*beer|cognac|ice\s*blue)\b/i);
   if (dialM) dial = dialM[1] || dialM[0];
-  if (!dial && ref) {
-    const su = ref.toUpperCase();
-    if (su.endsWith('LN')) dial = 'Black';
-    else if (su.endsWith('LB')) dial = 'Blue';
-    else if (su.endsWith('LV')) dial = 'Green';
-    else if (su.endsWith('CHNR')) dial = 'Brown';
-    else if (su.endsWith('R') && !su.includes('RM') && !su.includes('OR')) dial = 'Brown';
-    else if (su.endsWith('G') && !su.includes('GR') && !su.includes('RM')) dial = 'Blue';
-    else if (su.endsWith('J')) dial = 'Champagne';
-    else if (su.endsWith('P')) dial = 'Blue';
-    else if (su.endsWith('ST')) dial = 'Blue';
-    else if (su.endsWith('OR')) dial = 'Pink';
-    else if (su.endsWith('TI')) dial = 'Grey';
-    else if (su.endsWith('BC')) dial = 'Black';
-  }
 
-  if (/\bnew\b|unworn|bnib|sealed|full\s*set|full\s*sticker/i.test(text)) condition = 'New';
-  else if (/\bused\b|pre[\s-]?owned|worn|vintage/i.test(text)) condition = 'Used';
-  else if (/\bmint\b|excellent|near\s*mint/i.test(text)) condition = 'Like New';
+  if (/\bnew\b|unworn|bnib|sealed|full\s*set|full\s*sticker/i.test(cleanText)) condition = 'New';
+  else if (/\bused\b|pre[\s-]?owned|worn|vintage/i.test(cleanText)) condition = 'Used';
+  else if (/\bmint\b|excellent|near\s*mint/i.test(cleanText)) condition = 'Like New';
 
-  const yM = text.match(/\b(20[12]\d)\b/);
+  const yM = cleanText.match(/\b(19\d{2}|20[0-2]\d)\b/);
   if (yM) year = parseInt(yM[1], 10);
-
-  // Price already detected earlier for ref filtering; reuse here
-  let kPrice2 = null, explicitPrice2 = null;
-  const kM2 = text.match(/\b(\d{1,3}(?:\.\d{1,2})?)\s?[kK]\b/);
-  if (kM2) kPrice2 = Math.round(parseFloat(kM2[1]) * 1000);
-  const pM2 = text.match(/([\d,]{3,})\s?(HKD|USD|USDT|EUR|hkd|usd|eur|usdt|\$|€)/i);
-  if (pM2) explicitPrice2 = parseInt(pM2[1].replace(/,/g, ''), 10);
-
-  price = kPrice2 || explicitPrice2 || price;
-  if (pM2) {
-    const cs = (pM2[2] || '').toUpperCase();
-    if (cs === 'USD') currency = 'USD';
-    else if (cs === 'HKD' || cs === 'HK$') currency = 'HKD';
-    else if (cs === 'EUR' || cs === '€') currency = 'EUR';
-    else if (cs === 'USDT') currency = 'USDT';
-  }
-  if (!currency) {
-    if (/\bhkd\b|hk\$/i.test(text)) currency = 'HKD';
-    else if (/\busdt\b/i.test(text)) currency = 'USDT';
-    else if (/\beur\b|€/i.test(text)) currency = 'EUR';
-    else if (/\bUSD\b|US\$|U\$/i.test(text)) currency = 'USD';
-  }
 
   let confidence = 0;
   if (ref) confidence += 40;
@@ -931,7 +942,7 @@ function regexExtract(text) {
   if (price) confidence += 8;
   if (year) confidence += 4;
 
-  return { brand, ref, dial, condition, year, price, currency, confidence };
+  return { brand, ref, dial, condition, year, price, currency, confidence, status };
 }
 
 // ─── AI Parse ───

@@ -140,49 +140,22 @@
 
       <!-- TAB 1: DEALER SIGN IN -->
       <div id="authPanelDealer" class="space-y-4">
-        <div class="p-3 bg-[#1D1914] rounded-xl border border-[#3A3125]">
-          <div class="text-[11px] font-bold uppercase tracking-wider text-[#D4B87A] mb-2">⚡ 1-Click Fast Dealer Access</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <button onclick="loginAsPresetDealer('camila')" class="p-2.5 text-left rounded-lg bg-[#262019] hover:bg-[#382E22] border border-[#453828] transition flex flex-col">
-              <span class="text-xs font-bold text-white">Camila Alvarez</span>
-              <span class="text-[10px] text-[#A89F93]">Meridian Timepieces · Miami USA</span>
-              <span class="text-[10px] text-amber-400 font-mono mt-0.5">⭐ 4.9 · Verified Elite</span>
-            </button>
-            <button onclick="loginAsPresetDealer('jtze')" class="p-2.5 text-left rounded-lg bg-[#262019] hover:bg-[#382E22] border border-[#453828] transition flex flex-col">
-              <span class="text-xs font-bold text-white">jtze</span>
-              <span class="text-[10px] text-[#A89F93]">Hong Kong (+852)</span>
-              <span class="text-[10px] text-amber-400 font-mono mt-0.5">⭐ 4.9 · 14,538 Listings</span>
-            </button>
-            <button onclick="loginAsPresetDealer('forest')" class="p-2.5 text-left rounded-lg bg-[#262019] hover:bg-[#382E22] border border-[#453828] transition flex flex-col">
-              <span class="text-xs font-bold text-white">Forest</span>
-              <span class="text-[10px] text-[#A89F93]">China (+86)</span>
-              <span class="text-[10px] text-amber-400 font-mono mt-0.5">⭐ 4.9 · 7,306 Listings</span>
-            </button>
-            <button onclick="loginAsPresetDealer('aka')" class="p-2.5 text-left rounded-lg bg-[#262019] hover:bg-[#382E22] border border-[#453828] transition flex flex-col">
-              <span class="text-xs font-bold text-white">aka</span>
-              <span class="text-[10px] text-[#A89F93]">Hong Kong (+852)</span>
-              <span class="text-[10px] text-amber-400 font-mono mt-0.5">⭐ 4.9 · 8,779 Listings</span>
+        <div class="p-4 bg-[#1D1914] rounded-xl border border-[#3A3125]">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-[#D4B87A] mb-1">Authenticated Dealer Access</div>
+          <p class="text-xs text-[#A89F93] mb-3">Sign in with your registered dealer credentials to access the trading floor and inventory management.</p>
+          <div class="space-y-2.5">
+            <div>
+              <label class="block text-[11px] text-[#A89F93] mb-1">Dealer Name or Company</label>
+              <input type="text" id="customDealerName" placeholder="e.g. Geneva Luxury Watches" class="w-full bg-[#1C1813] border border-[#382E22] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C5A059]" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-[#A89F93] mb-1">WhatsApp / Phone Number</label>
+              <input type="text" id="customDealerPhone" placeholder="e.g. +1 305 555 0199" class="w-full bg-[#1C1813] border border-[#382E22] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C5A059]" />
+            </div>
+            <button onclick="loginAsCustomDealer()" class="w-full py-2.5 rounded-lg bg-[#C5A059] hover:bg-[#B38D45] text-[#0A0908] font-bold text-xs uppercase tracking-wider transition">
+              Sign In to Dealer Portal
             </button>
           </div>
-        </div>
-
-        <div class="relative flex items-center justify-center my-3">
-          <div class="border-t border-[#2B241C] w-full"></div>
-          <span class="bg-[#14120E] px-3 text-[10px] uppercase font-mono text-[#8A7E70]">or custom login</span>
-        </div>
-
-        <div class="space-y-2.5">
-          <div>
-            <label class="block text-[11px] text-[#A89F93] mb-1">Dealer Name or Handle</label>
-            <input type="text" id="customDealerName" placeholder="e.g. Geneva Luxury Watches" class="w-full bg-[#1C1813] border border-[#382E22] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C5A059]" />
-          </div>
-          <div>
-            <label class="block text-[11px] text-[#A89F93] mb-1">WhatsApp / Phone Number</label>
-            <input type="text" id="customDealerPhone" placeholder="e.g. +1 305 555 0199" class="w-full bg-[#1C1813] border border-[#382E22] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C5A059]" />
-          </div>
-          <button onclick="loginAsCustomDealer()" class="w-full py-2.5 rounded-lg bg-[#C5A059] hover:bg-[#B38D45] text-[#0A0908] font-bold text-xs uppercase tracking-wider transition">
-            Sign In & Enter Dashboard
-          </button>
         </div>
       </div>
 
@@ -190,10 +163,7 @@
       <div id="authPanelAdmin" class="space-y-4 hidden">
         <div class="p-3.5 bg-[#1F1914] rounded-xl border border-[#4D3A24]">
           <div class="text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-1">🛡️ Administrator Platform Oversight</div>
-          <p class="text-xs text-[#A89F93] mb-3">Access full catalog telemetry, moderation oversight, and dealer integrity tools.</p>
-          <button id="btnSkipAdmin" onclick="loginAsAdmin()" class="w-full py-2.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-bold text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5 shadow-md">
-            <span>🛡️ Skip & Enter as Administrator</span>
-          </button>
+          <p class="text-xs text-[#A89F93]">Requires authorized administrative credentials.</p>
         </div>
 
         <div class="space-y-2.5 pt-2">
@@ -542,6 +512,13 @@
         >
           Reference Check
         </button>
+        <button
+          id="navGlossary"
+          onclick="switchMainView('info')"
+          class="pb-1 border-b-2 border-transparent text-[#78716C] hover:text-[#1C1917] transition-all"
+        >
+          Glossary
+        </button>
       </nav>
 
       <!-- Auth & Session Indicator -->
@@ -558,44 +535,24 @@
 
         <div class="relative">
           <button
-            id="langDropdownBtn"
-            type="button"
-            onclick="toggleLanguageDropdown()"
-            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#D7CCBC] bg-[#FAF6F0] hover:bg-[#F6F0E7] text-[11px] font-bold text-[#1C1917] transition shadow-2xs cursor-pointer"
-            title="Translate interface language"
+            id="currencyBtn"
+            onclick="toggleCurrencyDropdown()"
+            class="px-3 py-1.5 rounded-full border border-[#D7CCBC] bg-[#FAF6F0] hover:bg-[#F6F0E7] text-[11px] font-mono font-bold text-[#1C1917] transition flex items-center gap-1.5 cursor-pointer"
           >
-            <span class="text-[#8A5826] font-mono">文A</span>
-            <span id="currentLangLabel">EN</span>
-            <span class="text-[9px] text-[#78716C]">▾</span>
+            <span id="selectedCurrencyLabel">USD ($)</span>
+            <span class="text-[9px] text-[#78716C]">▼</span>
           </button>
           <div
-            id="langDropdownMenu"
-            class="hidden absolute right-0 mt-1.5 w-36 rounded-xl border border-[#E5DACB] bg-[#FAF6F0] shadow-xl py-1 z-50 text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            id="currencyDropdown"
+            class="hidden absolute right-0 mt-1 w-32 bg-[#FAF6F0] border border-[#D7CCBC] rounded-xl shadow-lg z-50 py-1 text-xs font-mono"
           >
-            <button onclick="setLanguage('en')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
-              <span>English</span>
-              <span class="text-[10px] text-[#8A5826] font-mono">EN</span>
-            </button>
-            <button onclick="setLanguage('es')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
-              <span>Español</span>
-              <span class="text-[10px] text-[#8A5826] font-mono">ES</span>
-            </button>
-            <button onclick="setLanguage('zh')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
-              <span>繁體中文</span>
-              <span class="text-[10px] text-[#8A5826] font-mono">ZH</span>
-            </button>
-            <button onclick="setLanguage('ja')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
-              <span>日本語</span>
-              <span class="text-[10px] text-[#8A5826] font-mono">JA</span>
-            </button>
-            <button onclick="setLanguage('ar')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
-              <span>العربية</span>
-              <span class="text-[10px] text-[#8A5826] font-mono">AR</span>
-            </button>
-            <button onclick="setLanguage('fr')" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-[#EFE5D8] flex items-center justify-between text-[#1C1917]">
-              <span>Français</span>
-              <span class="text-[10px] text-[#8A5826] font-mono">FR</span>
-            </button>
+            <button onclick="selectCurrency('USD')" class="w-full text-left px-3 py-1.5 hover:bg-[#F6F0E7] text-[#1C1917]">USD ($)</button>
+            <button onclick="selectCurrency('HKD')" class="w-full text-left px-3 py-1.5 hover:bg-[#F6F0E7] text-[#1C1917]">HKD (HK$)</button>
+            <button onclick="selectCurrency('EUR')" class="w-full text-left px-3 py-1.5 hover:bg-[#F6F0E7] text-[#1C1917]">EUR (€)</button>
+            <button onclick="selectCurrency('GBP')" class="w-full text-left px-3 py-1.5 hover:bg-[#F6F0E7] text-[#1C1917]">GBP (£)</button>
+            <button onclick="selectCurrency('SGD')" class="w-full text-left px-3 py-1.5 hover:bg-[#F6F0E7] text-[#1C1917]">SGD (S$)</button>
+            <button onclick="selectCurrency('AED')" class="w-full text-left px-3 py-1.5 hover:bg-[#F6F0E7] text-[#1C1917]">AED (د.إ)</button>
+            <button onclick="selectCurrency('JPY')" class="w-full text-left px-3 py-1.5 hover:bg-[#F6F0E7] text-[#1C1917]">JPY (¥)</button>
           </div>
         </div>
       </div>
@@ -605,6 +562,7 @@
       <button id="mobNavTrading" onclick="switchMainView('trading-floor')" class="text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition">Trading Floor</button>
       <button id="mobNavResearch" onclick="switchMainView('price-research')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Price Research</button>
       <button id="mobNavDealers" onclick="switchMainView('dealers')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Reference Check</button>
+      <button id="mobNavGlossary" onclick="switchMainView('info')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Glossary</button>
       <button onclick="handleNavPostItClick()" class="text-[#9A7127] font-bold py-1 flex items-center gap-0.5">+ Post It</button>
     </div>
   </header>
@@ -994,7 +952,7 @@
           Price Research
         </h2>
         <p class="text-xs text-[#A89F93] mb-6">
-          Powered by <strong class="text-[#D4B87A]">16,000,000+ Historical Market Observations</strong> & price signals across 23,283 catalog reference models.
+          Powered by verified secondary market observation records & price signals across 23,283 catalog reference models.
         </p>
 
         <!-- Search Bar with Brand Dropdown -->
@@ -1120,6 +1078,170 @@
       </div>
       <div id="dealersGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
       <div id="dealersPagination" class="flex items-center justify-center gap-2 mt-10"></div>
+    </main>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- VIEW 4: PUBLIC INFO / GLOSSARY / METHODOLOGY (#/info/glossary)    -->
+  <!-- ================================================================= -->
+  <div id="viewInfo" class="hidden flex-1 bg-[#F6F5F1] text-[#111116]">
+    <!-- Hero Header -->
+    <section class="border-b border-black/10 px-6 py-12 sm:py-16">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8B692D] mb-3">
+          <span>📖 Curated Luxury · Market Documentation</span>
+        </div>
+        <h1 class="font-serif font-bold text-3xl sm:text-5xl text-[#111116] leading-tight mb-4">
+          Market language, made precise.
+        </h1>
+        <p class="text-sm sm:text-base text-stone-600 max-w-2xl leading-relaxed">
+          The authoritative horological and secondary-market terminology guide, dealer codes, verification tiers, and data ingestion freshness rules.
+        </p>
+
+        <!-- Category Filter Tabs -->
+        <div class="flex flex-wrap items-center gap-2 mt-8">
+          <button onclick="setInfoSection('glossary')" id="tabInfoGlossary" class="px-4 py-2 rounded-lg text-xs font-bold bg-[#1C1917] text-white transition cursor-pointer">
+            Glossary & Codes
+          </button>
+          <button onclick="setInfoSection('methodology')" id="tabInfoMethodology" class="px-4 py-2 rounded-lg text-xs font-bold bg-white border border-black/10 text-stone-700 hover:text-black transition cursor-pointer">
+            Methodology & Fences
+          </button>
+          <button onclick="setInfoSection('faq')" id="tabInfoFaq" class="px-4 py-2 rounded-lg text-xs font-bold bg-white border border-black/10 text-stone-700 hover:text-black transition cursor-pointer">
+            FAQ & Verification
+          </button>
+          <button onclick="setInfoSection('company')" id="tabInfoCompany" class="px-4 py-2 rounded-lg text-xs font-bold bg-white border border-black/10 text-stone-700 hover:text-black transition cursor-pointer">
+            Company & Trust
+          </button>
+          <button onclick="switchMainView('trading-floor')" class="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#8A5826] text-xs font-bold text-[#8A5826] hover:bg-[#8A5826] hover:text-white transition cursor-pointer">
+            <span>← Back to Trading Floor</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Info Sections Body -->
+    <main class="max-w-6xl mx-auto px-6 py-10">
+      <!-- Section: Glossary -->
+      <div id="infoSecGlossary" class="space-y-6">
+        <div>
+          <h2 class="font-serif font-bold text-2xl text-[#111116] mb-1">Standard Market Codes & Abbreviations</h2>
+          <p class="text-xs text-stone-600">Standardized abbreviations used across global dealer networks, secondary exchanges, and wholesale broadcast channels.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">WTS</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">Want to Sell (For Sale)</div>
+            <p class="text-xs text-stone-600 leading-relaxed">A dealer or verified collector is actively offering the listed timepiece or luxury object. Requires atomic reference confirmation, configuration, and verified currency.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">WTB / NTQ</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">Want to Buy / Need to Quote</div>
+            <p class="text-xs text-stone-600 leading-relaxed">Active market demand indicator. Signals dealer liquidity and acquisition intent. WTB records are strictly isolated from supply asks with no spurious price floors.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">B&P / Full Set</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">Box & Papers / Complete Set</div>
+            <p class="text-xs text-stone-600 leading-relaxed">Includes original manufacturer outer/inner presentation box, official warranty certificate or card, manuals, and accessories, ensuring verified provenance.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">Naked / Watch Only</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">Timepiece Only Without Packaging</div>
+            <p class="text-xs text-stone-600 leading-relaxed">An authentic timepiece offered solely as the watch without factory documentation or display box. Priced according to secondary market precedent.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">Unpolished / Factory Finished</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">Untouched Geometry</div>
+            <p class="text-xs text-stone-600 leading-relaxed">Case retains original factory bevels, sharp chamfers, satin brush grain, and lug proportions without abrasive secondary metal restoration.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">NOS</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">New Old Stock</div>
+            <p class="text-xs text-stone-600 leading-relaxed">Discontinued or vintage timepiece in brand-new, unworn condition, often preserving original factory barcode stickers, bezel protectors, and unswiped warranty cards.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">Unbundled Lineage</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">Multi-Item Broadcast Decomposition</div>
+            <p class="text-xs text-stone-600 leading-relaxed">High-volume dealer broadcasts containing multiple watches are segmented into discrete, atomic cards while maintaining a cryptographic parent pointer to the original message.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <div class="font-mono text-xs font-bold text-[#8A5826] mb-1">Price Requires Review</div>
+            <div class="font-semibold text-sm text-[#111116] mb-1">Publication & Integrity Gate</div>
+            <p class="text-xs text-stone-600 leading-relaxed">Listings with ambiguous decimals, unparseable currencies, or contested amounts are withheld from numerical sorting and flagged for human dealer review.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Methodology -->
+      <div id="infoSecMethodology" class="hidden space-y-6">
+        <div>
+          <h2 class="font-serif font-bold text-2xl text-[#111116] mb-1">Statistical Methodology & Outlier Fencing</h2>
+          <p class="text-xs text-stone-600">Rigorous non-parametric mathematical models governing price research, benchmark ratings, and FX conversions.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <h3 class="font-semibold text-sm text-[#111116] mb-2">3.0x IQR Outlier Filtering</h3>
+            <p class="text-xs text-stone-600 leading-relaxed">Non-parametric fences defined by Q1 - 3.0×IQR and Q3 + 3.0×IQR isolate typographical errors or misidentified lots without skewing the true median or quartile distribution.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <h3 class="font-semibold text-sm text-[#111116] mb-2">FX Normalization & Daily Parity</h3>
+            <p class="text-xs text-stone-600 leading-relaxed">All international asks (HKD, EUR, GBP, AED, JPY, USDT) are converted to benchmark USD using verified daily rates (e.g. HKD: 0.1282, EUR: 1.085, GBP: 1.29) while preserving 100% of native currency records.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <h3 class="font-semibold text-sm text-[#111116] mb-2">Dial-Color Cohort Decomposition</h3>
+            <p class="text-xs text-stone-600 leading-relaxed">Benchmark statistics are decomposed by dial execution (e.g. Olive Green vs Roman White vs Black), ensuring premium dial variances do not contaminate baseline reference valuations.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <h3 class="font-semibold text-sm text-[#111116] mb-2">Cryptographic De-Duplication</h3>
+            <p class="text-xs text-stone-600 leading-relaxed">Every incoming listing is fingerprinted with a SHA256 signature combining verified phone, brand, reference, dial, and price. Identical re-broadcasts are merged to prevent feed saturation.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: FAQ -->
+      <div id="infoSecFaq" class="hidden space-y-6">
+        <div>
+          <h2 class="font-serif font-bold text-2xl text-[#111116] mb-1">Frequently Asked Questions</h2>
+          <p class="text-xs text-stone-600">Verification criteria, communication flows, and data architecture.</p>
+        </div>
+        <div class="space-y-4">
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <h3 class="font-semibold text-sm text-[#111116] mb-1">How does Curated Luxury verify listings?</h3>
+            <p class="text-xs text-stone-600 leading-relaxed">Every broadcast undergoes algorithmic reference normalization, currency parsing, and dealer verification. Incomplete or ambiguous listings are flagged for review rather than published with hallucinated data.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <h3 class="font-semibold text-sm text-[#111116] mb-1">How does "Check Availability" work?</h3>
+            <p class="text-xs text-stone-600 leading-relaxed">Clicking "Check Availability" creates a direct connection to the offering dealer via WhatsApp, pre-filling verified watch details, reference, and ask price for authenticated communication.</p>
+          </div>
+          <div class="p-5 bg-white border border-black/10 rounded-xl shadow-xs">
+            <h3 class="font-semibold text-sm text-[#111116] mb-1">What are the Dealer Verification Tiers?</h3>
+            <p class="text-xs text-stone-600 leading-relaxed">Dealers are evaluated across trading history, responsiveness, authentic inventory track record, and reference checks. Tier 1 dealers have established physical premises and vetted peer references.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Company -->
+      <div id="infoSecCompany" class="hidden space-y-6">
+        <div>
+          <h2 class="font-serif font-bold text-2xl text-[#111116] mb-1">Company & Trust Infrastructure</h2>
+          <p class="text-xs text-stone-600">Built on evidentiary integrity and direct dealer provenance.</p>
+        </div>
+        <div class="p-6 bg-white border border-black/10 rounded-xl shadow-xs space-y-4">
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 rounded-lg bg-[#FAF6F0] border border-[#E5DACB] flex items-center justify-center text-lg shrink-0">📍</div>
+            <div>
+              <h3 class="font-semibold text-sm text-[#111116]">Global Headquarters</h3>
+              <p class="text-xs text-stone-600 mt-1">14 NE 1st Ave #1102, Miami, FL 33132 · United States (Miami Jewelry & Diamond District)</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4 pt-4 border-t border-black/10">
+            <div class="w-10 h-10 rounded-lg bg-[#FAF6F0] border border-[#E5DACB] flex items-center justify-center text-lg shrink-0">🛡️</div>
+            <div>
+              <h3 class="font-semibold text-sm text-[#111116]">Raw Fidelity Principle</h3>
+              <p class="text-xs text-stone-600 mt-1">Original listing text, dealer provenance, and observation timestamps remain immutably connected to normalized records. We never overwrite or delete source evidence.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -1385,7 +1507,7 @@
         <a href="#/trading" onclick="switchMainView('trading-floor')" class="hover:text-[#C5A059] transition">Trading Floor</a>
         <a href="#/price-research" onclick="switchMainView('price-research')" class="hover:text-[#C5A059] transition">Price Research</a>
         <a href="#/dealers" onclick="switchMainView('dealers')" class="hover:text-[#C5A059] transition">Reference Check</a>
-        <a href="https://www.curatedluxury.space/#/info/glossary" target="_blank" class="text-white font-semibold hover:text-[#C5A059] transition">Glossary & FAQ</a>
+        <a href="#/info/glossary" onclick="switchMainView('info')" class="text-white font-semibold hover:text-[#C5A059] transition">Glossary & FAQ</a>
         <a href="https://luxfi.ai/#add-fi" target="_blank" class="hover:text-[#C5A059] transition flex items-center gap-1">Hire Fi ↗</a>
         <button onclick="toggleDealerProfileDrawer()" class="hover:text-[#C5A059] transition cursor-pointer">Dealer Workspace</button>
         <button onclick="openAuthModal('dealer')" class="hover:text-[#C5A059] transition cursor-pointer">Dealer Account</button>
@@ -1556,6 +1678,8 @@
       }
       return auxiliaryPromise;
     }
+    window.preloadAuxiliaryData = preloadAuxiliaryData;
+    window.ensureAuxiliaryData = preloadAuxiliaryData;
 
     async function streamRemainingChunks(totalChunks) {
       // Allow initial page and auxiliary data priority
@@ -1637,78 +1761,26 @@
     }
 
     async function searchAcrossAllChunks() {
-      if (isSearchingAllChunks) return;
-      const query = (currentSearch || document.getElementById('searchInput').value || '').trim().toLowerCase();
+      const inputEl = document.getElementById('searchInput');
+      const query = (inputEl ? inputEl.value : currentSearch || '').trim();
       if (!query) {
-        alert("Please enter a watch model, reference number, or brand to search.");
+        currentSearch = '';
+        renderListings();
         return;
       }
 
-      isSearchingAllChunks = true;
-      const statusBanner = document.getElementById('deepSearchStatusBanner');
-      if (statusBanner) {
-        statusBanner.classList.remove('hidden');
-        statusBanner.innerHTML = `
-          <div class="flex items-center justify-between gap-3 text-xs bg-amber-50 border border-amber-300 rounded-lg p-3 text-amber-900 shadow-sm animate-pulse">
-            <div class="flex items-center gap-2">
-              <span class="animate-spin text-base">⏳</span>
-              <span>Scanning all 49 background chunks (1,225,000 listings) for <strong>"${escapeHtml(query)}"</strong>...</span>
-            </div>
-            <span id="deepSearchChunkCounter" class="font-mono text-[11px] font-bold">Scanning...</span>
-          </div>
-        `;
-      }
-
-      let newMatchesCount = 0;
-      const chunksToScan = [];
-      for (let i = 0; i < totalCatalogChunks; i++) {
-        if (!loadedChunkIndices.has(i)) chunksToScan.push(i);
-      }
-
-      for (let k = 0; k < chunksToScan.length; k++) {
-        const idx = chunksToScan[k];
-        const counterEl = document.getElementById('deepSearchChunkCounter');
-        if (counterEl) counterEl.textContent = `Chunk ${k + 1}/${chunksToScan.length}`;
-
-        try {
-          const chunk = await fetchCatalogData(`data/listings_chunk_${idx}.json`);
-          if (chunk && Array.isArray(chunk)) {
-            let chunkFoundMatches = false;
-            for (let j = 0; j < chunk.length; j++) {
-              const item = chunk[j];
-              const nickStr = (item.nicknames || []).join(' ');
-              const compStr = (item.completeness_tags || []).join(' ');
-              const hay = `${item.brand} ${item.model} ${item.reference} ${item.dial} ${item.category || ''} ${nickStr} ${compStr} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
-              if (hay.includes(query)) {
-                chunkFoundMatches = true;
-                newMatchesCount++;
-              }
-            }
-            if (chunkFoundMatches) {
-              for (let j = 0; j < chunk.length; j++) {
-                ALL_LISTINGS.push(chunk[j]);
-                listingsById.set(chunk[j].id, chunk[j]);
-              }
-              loadedChunkIndices.add(idx);
-              currentChunkIndex = Math.max(currentChunkIndex, idx);
-              updateCatalogStatusDisplays();
-            }
-          }
-        } catch (e) {
-          console.warn(`Search scan error chunk ${idx}:`, e);
-        }
-      }
-
-      isSearchingAllChunks = false;
+      currentSearch = query.toLowerCase();
       renderListings();
 
+      const statusBanner = document.getElementById('deepSearchStatusBanner');
       if (statusBanner) {
+        const filtered = getFilteredListings();
         statusBanner.classList.remove('hidden');
         statusBanner.innerHTML = `
           <div class="flex items-center justify-between gap-3 text-xs bg-emerald-50 border border-emerald-300 rounded-lg p-3 text-emerald-900 shadow-sm">
             <div class="flex items-center gap-2">
               <span class="text-base">✓</span>
-              <span>Deep search complete for <strong>"${escapeHtml(query)}"</strong>. Added <strong>${newMatchesCount.toLocaleString()}</strong> matching listings from pending chunks.</span>
+              <span>Found <strong>${filtered.length.toLocaleString()}</strong> listings matching <strong>"${escapeHtml(query)}"</strong> across active trading inventory.</span>
             </div>
             <button onclick="document.getElementById('deepSearchStatusBanner').classList.add('hidden')" class="px-2 py-0.5 rounded bg-emerald-200 text-emerald-950 font-bold hover:bg-emerald-300 text-[10px]">
               Dismiss
@@ -1862,19 +1934,22 @@
       const vTrading = document.getElementById('viewTradingFloor');
       const vResearch = document.getElementById('viewPriceResearch');
       const vDealers = document.getElementById('viewDealers');
+      const vInfo = document.getElementById('viewInfo');
 
       const navTrading = document.getElementById('navTradingFloor');
       const navResearch = document.getElementById('navPriceResearch');
       const navDealers = document.getElementById('navDealers');
+      const navGlossary = document.getElementById('navGlossary');
 
       const mobTrading = document.getElementById('mobNavTrading');
       const mobResearch = document.getElementById('mobNavResearch');
       const mobDealers = document.getElementById('mobNavDealers');
+      const mobGlossary = document.getElementById('mobNavGlossary');
 
-      [navTrading, navResearch, navDealers].forEach(b => {
+      [navTrading, navResearch, navDealers, navGlossary].forEach(b => {
         if (b) b.className = "pb-1 border-b-2 border-transparent text-[#78716C] hover:text-[#1C1917] transition-all";
       });
-      [mobTrading, mobResearch, mobDealers].forEach(b => {
+      [mobTrading, mobResearch, mobDealers, mobGlossary].forEach(b => {
         if (b) b.className = "hover:text-[#1C1917] py-1 border-b-2 border-transparent transition";
       });
 
@@ -1889,6 +1964,7 @@
         vTrading.classList.remove('hidden');
         vResearch.classList.add('hidden');
         vDealers.classList.add('hidden');
+        if (vInfo) vInfo.classList.add('hidden');
         if (navTrading) navTrading.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
         if (mobTrading) mobTrading.className = "text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition";
         if (syncHash && window.location.hash !== '#/trading') window.location.hash = '#/trading';
@@ -1897,6 +1973,7 @@
         vTrading.classList.add('hidden');
         vResearch.classList.remove('hidden');
         vDealers.classList.add('hidden');
+        if (vInfo) vInfo.classList.add('hidden');
         if (navResearch) navResearch.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
         if (mobResearch) mobResearch.className = "text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition";
         if (syncHash && window.location.hash !== '#/price-research') window.location.hash = '#/price-research';
@@ -1905,16 +1982,41 @@
         vTrading.classList.add('hidden');
         vResearch.classList.add('hidden');
         vDealers.classList.remove('hidden');
+        if (vInfo) vInfo.classList.add('hidden');
         if (navDealers) navDealers.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
         if (mobDealers) mobDealers.className = "text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition";
         if (syncHash && window.location.hash !== '#/dealers') window.location.hash = '#/dealers';
         renderDealersDirectory();
+      } else if (view === 'info') {
+        vTrading.classList.add('hidden');
+        vResearch.classList.add('hidden');
+        vDealers.classList.add('hidden');
+        if (vInfo) vInfo.classList.remove('hidden');
+        if (navGlossary) navGlossary.className = "pb-1 border-b-2 border-[#9A7127] text-[#1C1917] font-bold transition-all";
+        if (mobGlossary) mobGlossary.className = "text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition";
+        if (syncHash && !window.location.hash.startsWith('#/info')) window.location.hash = '#/info/glossary';
       }
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
 
+    function setInfoSection(sec) {
+      ['Glossary', 'Methodology', 'Faq', 'Company'].forEach(s => {
+        const el = document.getElementById('infoSec' + s);
+        const tab = document.getElementById('tabInfo' + s);
+        if (el) el.classList.add('hidden');
+        if (tab) {
+          tab.className = "px-4 py-2 rounded-lg text-xs font-bold bg-white border border-black/10 text-stone-700 hover:text-black transition cursor-pointer";
+        }
+      });
+      const key = sec.charAt(0).toUpperCase() + sec.slice(1);
+      const activeEl = document.getElementById('infoSec' + key);
+      const activeTab = document.getElementById('tabInfo' + key);
+      if (activeEl) activeEl.classList.remove('hidden');
+      if (activeTab) activeTab.className = "px-4 py-2 rounded-lg text-xs font-bold bg-[#1C1917] text-white transition cursor-pointer";
+    }
+
     let isHandlingHash = false;
-    function handleHashChange() {
+    async function handleHashChange() {
       if (isHandlingHash) return;
       isHandlingHash = true;
       try {
@@ -1922,7 +2024,7 @@
         if (hash.startsWith('#/price-research')) {
           const parts = hash.split('/');
           if (parts.length > 2 && parts[2]) {
-            openPriceResearch(parts[2], false);
+            await openPriceResearch(parts[2], false);
           } else {
             switchMainView('price-research', false);
           }
@@ -1935,6 +2037,12 @@
             if (searchInput) searchInput.value = dealerTarget;
           }
           switchMainView('dealers', false);
+        } else if (hash.startsWith('#/info')) {
+          switchMainView('info', false);
+          if (hash.includes('methodology')) setInfoSection('methodology');
+          else if (hash.includes('faq')) setInfoSection('faq');
+          else if (hash.includes('company')) setInfoSection('company');
+          else setInfoSection('glossary');
         } else {
           switchMainView('trading-floor', false);
         }
@@ -2142,11 +2250,12 @@
           if (!selectedCategories.has(itemCat)) return false;
         }
 
-        // Listing type filter
+        // Listing type filter (OR logic within selected types: selecting both sale and wtb retains all)
         if (!selectedListingTypes.has('all')) {
           const isSale = item.type !== 'wtb' && item.type !== 'search';
-          if (selectedListingTypes.has('sale') && !isSale) return false;
-          if (selectedListingTypes.has('wtb') && isSale) return false;
+          const matchSale = selectedListingTypes.has('sale') && isSale;
+          const matchWtb = selectedListingTypes.has('wtb') && !isSale;
+          if (!matchSale && !matchWtb) return false;
         }
 
         // Brand filter
@@ -2166,12 +2275,19 @@
           if (!matched) return false;
         }
 
-        // Search text
+        // Search text (supports punctuation-agnostic reference normalization e.g. 5712/1R vs 57121R)
         if (currentSearch) {
+          const rawQ = currentSearch.toLowerCase();
+          const cleanQ = rawQ.replace(/[^a-z0-9]/g, '');
+          const rawRef = (item.reference || '').toLowerCase();
+          const cleanRef = rawRef.replace(/[^a-z0-9]/g, '');
           const nickStr = (item.nicknames || []).join(' ');
           const compStr = (item.completeness_tags || []).join(' ');
-          const hay = `${item.brand} ${item.model} ${item.reference} ${item.dial} ${item.category || ''} ${nickStr} ${compStr} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
-          if (!hay.includes(currentSearch)) return false;
+          const hay = `${item.brand} ${item.model} ${rawRef} ${cleanRef} ${item.dial} ${item.category || ''} ${nickStr} ${compStr} ${item.from_name} ${item.extracted_line || ''}`.toLowerCase();
+          const cleanHay = hay.replace(/[^a-z0-9]/g, '');
+          const matchesRaw = hay.includes(rawQ);
+          const matchesClean = cleanQ.length > 2 && cleanHay.includes(cleanQ);
+          if (!matchesRaw && !matchesClean) return false;
         }
 
         return true;
@@ -2179,10 +2295,9 @@
 
       if (!hideRebroadcasts) return baseFiltered;
 
-      // Deduplication Mode: Compute cryptographic signature counts and keep only primary card
+      // Deduplication Mode: Uniform cryptographic signature across all posts (no is_live_post bypass)
       const sigCounts = new Map();
       baseFiltered.forEach(item => {
-        if (item.is_live_post) return;
         const sig = `${item.from_number || item.from_name || ''}|${item.category || 'Watches'}|${item.brand || ''}|${item.model || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
         sigCounts.set(sig, (sigCounts.get(sig) || 0) + 1);
       });
@@ -2190,10 +2305,6 @@
       const seenSigs = new Set();
       const deduped = [];
       baseFiltered.forEach(item => {
-        if (item.is_live_post) {
-          deduped.push(item);
-          return;
-        }
         const sig = `${item.from_number || item.from_name || ''}|${item.category || 'Watches'}|${item.brand || ''}|${item.model || ''}|${item.reference || ''}|${item.dial || ''}|${Math.round(item.price_usd || item.price || 0)}`;
         if (!seenSigs.has(sig)) {
           seenSigs.add(sig);
@@ -2727,7 +2838,10 @@
       }
     }
 
-    function openPriceResearch(key, syncHash = true) {
+    async function openPriceResearch(key, syncHash = true) {
+      if (!auxiliaryLoaded) {
+        await preloadAuxiliaryData();
+      }
       document.getElementById('researchSuggestions').classList.add('hidden');
       const cleanKey = key.toLowerCase().replace(/[^a-zA-Z0-9]/g, '');
       const rec = researchIndex[cleanKey];
@@ -2759,7 +2873,7 @@
       view.classList.remove('hidden');
 
       // Ensure Price Research evidence is strictly watches and deduplicated
-      const rawWtsObs = evidenceByRef[cleanKey] || rec.evidence_rows || [];
+      const rawWtsObs = (rec.evidence_rows && rec.evidence_rows.length > 0) ? rec.evidence_rows : (evidenceByRef[cleanKey] || []);
       const seenObsSig = new Set();
       const wtsObs = rawWtsObs.filter(it => {
         // Exclude non-watches from price research calculations and evidence
@@ -2801,7 +2915,8 @@
       const iqrP = dynIqr ? `$${dynIqr.toLocaleString()}` : (cohortAll.iqr ? `$${Math.round(cohortAll.iqr).toLocaleString()}` : '$0');
 
       // Extract Forecast & Historical trend metrics
-      const fc = rec.forecast || {
+      const isForecastUnavailable = rec.forecast === null || rec.forecast_status === 'UNAVAILABLE';
+      const fc = isForecastUnavailable ? null : (rec.forecast || {
         trend_direction: 'STABLE',
         momentum_pct: 0.0,
         forecast_3m: Math.round(cohortAll.median_price || 0),
@@ -2810,7 +2925,7 @@
         forecast_6m: Math.round(cohortAll.median_price || 0),
         forecast_6m_high: Math.round((cohortAll.median_price || 0) * 1.10),
         forecast_6m_low: Math.round((cohortAll.median_price || 0) * 0.90)
-      };
+      });
 
       const validPoints = (rec.history_points || []).filter(p => (p.median_price || p.avg_price || 0) > 500);
       const histPts = validPoints.length > 0 ? validPoints : [
@@ -2826,17 +2941,21 @@
         const chartW = svgW - padX * 2;
         const chartH = svgH - padY * 2;
 
+        const hasFc = forecast && forecast.forecast_3m && forecast.forecast_3m > 0;
         const allYs = points.map(p => p.median_price || p.avg_price || 0).filter(y => y > 0);
-        if (forecast.forecast_3m_high) allYs.push(forecast.forecast_3m_high);
-        if (forecast.forecast_6m_high) allYs.push(forecast.forecast_6m_high);
-        if (forecast.forecast_3m_low) allYs.push(forecast.forecast_3m_low);
-        if (forecast.forecast_6m_low) allYs.push(forecast.forecast_6m_low);
+        if (hasFc) {
+          if (forecast.forecast_3m_high) allYs.push(forecast.forecast_3m_high);
+          if (forecast.forecast_6m_high) allYs.push(forecast.forecast_6m_high);
+          if (forecast.forecast_3m_low) allYs.push(forecast.forecast_3m_low);
+          if (forecast.forecast_6m_low) allYs.push(forecast.forecast_6m_low);
+        }
+        if (allYs.length === 0) allYs.push(1000);
 
         let minY = Math.min(...allYs) * 0.88;
         let maxY = Math.max(...allYs) * 1.08;
         if (maxY === minY) { maxY += 1000; minY = Math.max(0, minY - 1000); }
 
-        const totalSteps = points.length + 2; // + 3M and 6M forecast points
+        const totalSteps = hasFc ? points.length + 2 : Math.max(points.length, 2);
         const getX = (idx) => padX + (idx / (totalSteps - 1)) * chartW;
         const getY = (val) => padY + chartH - ((val - minY) / (maxY - minY)) * chartH;
 
@@ -2847,22 +2966,6 @@
           const y = getY(p.median_price || p.avg_price || 0);
           histPathD += (idx === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
         });
-
-        // Forecast Line & Cone Coordinates
-        const lastIdx = points.length - 1;
-        const lastX = getX(lastIdx);
-        const lastY = getY(points[lastIdx].median_price || points[lastIdx].avg_price || 0);
-        const f3X = getX(lastIdx + 1);
-        const f3Y = getY(forecast.forecast_3m);
-        const f3HighY = getY(forecast.forecast_3m_high);
-        const f3LowY = getY(forecast.forecast_3m_low);
-        const f6X = getX(lastIdx + 2);
-        const f6Y = getY(forecast.forecast_6m);
-        const f6HighY = getY(forecast.forecast_6m_high);
-        const f6LowY = getY(forecast.forecast_6m_low);
-
-        const forecastPathD = `M ${lastX} ${lastY} L ${f3X} ${f3Y} L ${f6X} ${f6Y}`;
-        const conePathD = `M ${lastX} ${lastY} L ${f3X} ${f3HighY} L ${f6X} ${f6HighY} L ${f6X} ${f6LowY} L ${f3X} ${f3LowY} Z`;
 
         // Points markup
         let pointsMarkup = '';
@@ -2876,13 +2979,40 @@
           `;
         });
 
-        // Forecast points
-        pointsMarkup += `
-          <circle cx="${f3X}" cy="${f3Y}" r="4.5" fill="#38BDF8" stroke="#0369A1" stroke-width="2" />
-          <text x="${f3X}" y="${svgH - 12}" text-anchor="middle" font-size="9" font-weight="bold" fill="#38BDF8" font-family="monospace">+3M</text>
-          <circle cx="${f6X}" cy="${f6Y}" r="5" fill="#A855F7" stroke="#6B21A8" stroke-width="2" />
-          <text x="${f6X}" y="${svgH - 12}" text-anchor="middle" font-size="9" font-weight="bold" fill="#A855F7" font-family="monospace">+6M</text>
-        `;
+        let forecastElements = '';
+        if (hasFc) {
+          const lastIdx = points.length - 1;
+          const lastX = getX(lastIdx);
+          const lastY = getY(points[lastIdx].median_price || points[lastIdx].avg_price || 0);
+          const f3X = getX(lastIdx + 1);
+          const f3Y = getY(forecast.forecast_3m);
+          const f3HighY = getY(forecast.forecast_3m_high);
+          const f3LowY = getY(forecast.forecast_3m_low);
+          const f6X = getX(lastIdx + 2);
+          const f6Y = getY(forecast.forecast_6m);
+          const f6HighY = getY(forecast.forecast_6m_high);
+          const f6LowY = getY(forecast.forecast_6m_low);
+
+          const forecastPathD = `M ${lastX} ${lastY} L ${f3X} ${f3Y} L ${f6X} ${f6Y}`;
+          const conePathD = `M ${lastX} ${lastY} L ${f3X} ${f3HighY} L ${f6X} ${f6HighY} L ${f6X} ${f6LowY} L ${f3X} ${f3LowY} Z`;
+
+          const fcPoints = `
+            <circle cx="${f3X}" cy="${f3Y}" r="4.5" fill="#38BDF8" stroke="#0369A1" stroke-width="2" />
+            <text x="${f3X}" y="${svgH - 12}" text-anchor="middle" font-size="9" font-weight="bold" fill="#38BDF8" font-family="monospace">+3M</text>
+            <circle cx="${f6X}" cy="${f6Y}" r="5" fill="#A855F7" stroke="#6B21A8" stroke-width="2" />
+            <text x="${f6X}" y="${svgH - 12}" text-anchor="middle" font-size="9" font-weight="bold" fill="#A855F7" font-family="monospace">+6M</text>
+          `;
+
+          forecastElements = `
+            <path d="${conePathD}" fill="url(#forecastConeGrad)" />
+            <path d="${forecastPathD}" fill="none" stroke="#38BDF8" stroke-width="2.5" stroke-dasharray="4 4" stroke-linecap="round" />
+            ${fcPoints}
+          `;
+        } else {
+          forecastElements = `
+            <text x="${svgW / 2}" y="${padY + 25}" text-anchor="middle" font-size="11" fill="#8A7E70" font-family="sans-serif">Predictive forecast unavailable for this reference (insufficient longitudinal cohort depth or wide variance)</text>
+          `;
+        }
 
         // Y-axis labels
         const yLabels = `
@@ -2905,15 +3035,10 @@
             <line x1="${padX}" y1="${padY + chartH}" x2="${svgW - padX}" y2="${padY + chartH}" stroke="#E5DACB" />
             
             ${yLabels}
-            
-            <!-- Forecast Confidence Cone -->
-            <path d="${conePathD}" fill="url(#forecastConeGrad)" />
+            ${forecastElements}
             
             <!-- Historical Solid Line -->
             <path d="${histPathD}" fill="none" stroke="#C5A059" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-            
-            <!-- Predictive Forecast Dashed Line -->
-            <path d="${forecastPathD}" fill="none" stroke="#38BDF8" stroke-width="2.5" stroke-dasharray="4 4" stroke-linecap="round" />
             
             <!-- Data Points -->
             ${pointsMarkup}
@@ -2944,9 +3069,11 @@
       }).join('');
 
       // Direction Badge
-      const dirColor = fc.trend_direction === 'BULLISH' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
-                       fc.trend_direction === 'BEARISH' ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100 text-amber-800 border-amber-300';
-      const dirIcon = fc.trend_direction === 'BULLISH' ? '↗' : fc.trend_direction === 'BEARISH' ? '↘' : '→';
+      const dirColor = (!fc || fc.trend_direction === 'STABLE') ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                       fc.trend_direction === 'BULLISH' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                       fc.trend_direction === 'BEARISH' ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-stone-100 text-stone-700 border-stone-300';
+      const dirIcon = !fc ? '⚪' : fc.trend_direction === 'BULLISH' ? '↗' : fc.trend_direction === 'BEARISH' ? '↘' : '→';
+      const dirLabel = fc ? `${fc.trend_direction} (${fc.momentum_pct > 0 ? '+' : ''}${fc.momentum_pct}%)` : 'FORECAST UNAVAILABLE';
 
       const dialRows = (rec.dial_comparisons || []).map(d => {
         const hex = d.hex_color || '#8A5826';
@@ -2994,7 +3121,7 @@
               <div class="text-xs text-[#6B7280] mt-1 flex items-center gap-2">
                 <span>${wtsObs.length > 0 ? wtsObs.length.toLocaleString() : (rec.total_observations || 0).toLocaleString()} observations</span>
                 <span>·</span>
-                <span class="px-2 py-0.5 rounded border text-[10px] font-bold font-mono ${dirColor}">${dirIcon} ${fc.trend_direction} (${fc.momentum_pct > 0 ? '+' : ''}${fc.momentum_pct}%)</span>
+                <span class="px-2 py-0.5 rounded border text-[10px] font-bold font-mono ${dirColor}">${dirIcon} ${dirLabel}</span>
               </div>
             </div>
           </div>
@@ -3013,13 +3140,13 @@
           </div>
           <div class="p-4 bg-white border border-[#E5DACB] rounded-xl shadow-sm">
             <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">3-Month Forecast</div>
-            <div class="font-serif font-bold text-2xl text-sky-600 mt-1">$${fc.forecast_3m.toLocaleString()}</div>
-            <div class="text-[10px] text-[#6B7280] mt-0.5">Range: $${fc.forecast_3m_low.toLocaleString()} - $${fc.forecast_3m_high.toLocaleString()}</div>
+            <div class="font-serif font-bold ${fc ? 'text-2xl text-sky-600' : 'text-lg text-stone-500'} mt-1">${fc ? `$${fc.forecast_3m.toLocaleString()}` : 'Unavailable'}</div>
+            <div class="text-[10px] text-[#6B7280] mt-0.5">${fc ? `Range: $${fc.forecast_3m_low.toLocaleString()} - $${fc.forecast_3m_high.toLocaleString()}` : 'Low observations / high volatility'}</div>
           </div>
           <div class="p-4 bg-white border border-[#E5DACB] rounded-xl shadow-sm">
             <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">6-Month Forecast</div>
-            <div class="font-serif font-bold text-2xl text-purple-600 mt-1">$${fc.forecast_6m.toLocaleString()}</div>
-            <div class="text-[10px] text-[#6B7280] mt-0.5">Range: $${fc.forecast_6m_low.toLocaleString()} - $${fc.forecast_6m_high.toLocaleString()}</div>
+            <div class="font-serif font-bold ${fc ? 'text-2xl text-purple-600' : 'text-lg text-stone-500'} mt-1">${fc ? `$${fc.forecast_6m.toLocaleString()}` : 'Unavailable'}</div>
+            <div class="text-[10px] text-[#6B7280] mt-0.5">${fc ? `Range: $${fc.forecast_6m_low.toLocaleString()} - $${fc.forecast_6m_high.toLocaleString()}` : 'Confidence threshold not met'}</div>
           </div>
           <div class="p-4 bg-white border border-[#E5DACB] rounded-xl shadow-sm">
             <div class="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">WTB / WTS Ratio</div>
@@ -3033,7 +3160,7 @@
           <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
             <div>
               <h3 class="font-serif font-bold text-lg text-[#1C1917]">Historical Price Trend & Predictive Forecast Trajectory</h3>
-              <p class="text-xs text-[#6B7280]">20-Month historical transaction pricing with algorithmic momentum forecast cone (±1σ standard error band).</p>
+              <p class="text-xs text-[#6B7280]">Historical secondary market observation pricing with algorithmic momentum trend trajectory.</p>
             </div>
             <div class="flex items-center gap-3 text-[11px] font-mono shrink-0">
               <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-[#C5A059] rounded"></span> Historical</span>
@@ -3885,59 +4012,19 @@
     // -------------------------------------------------------------
     // POST IT: PERSISTENCE & PRICE RESEARCH FEED ENGINE
     // -------------------------------------------------------------
-    const SEED_POST_IT_LISTING = {
-      id: "post_it_seed_camila_116500ln",
-      brand: "Rolex",
-      model: "Cosmograph Daytona",
-      reference: "116500LN",
-      dial: "White",
-      year: "2024",
-      condition: "New / Unworn",
-      price: 27500,
-      price_usd: 27500,
-      formatted_price: "$27,500",
-      type: "sale",
-      origin: "Dealer Portal (Post It)",
-      from_name: "Camila Alvarez",
-      from_number: "+1 305 555 0192",
-      created_on: "2026-09-12 13:15:00",
-      extracted_line: "Rolex Cosmograph Daytona 116500LN White Panda dial brand new complete box & papers $27,500",
-      image_url: "https://thecollective-prod.nyc3.digitaloceanspaces.com/products/watches/132366_front_image.jpg",
-      nicknames: ["Panda"],
-      completeness_tags: ["Full Set", "White Tag"],
-      location: "Miami, USA",
-      category: "Watches",
-      is_live_post: true
-    };
-
     function loadPersistedDealerPosts() {
       try {
         const raw = localStorage.getItem('cl_live_dealer_posts');
         if (raw) {
           const list = JSON.parse(raw);
           if (Array.isArray(list) && list.length > 0) {
-            let modified = false;
-            const sanitized = list.map(item => {
-              if (item.image_url && (item.image_url.includes('photo-1522335789203') || item.image_url.includes('unsplash.com'))) {
-                item.image_url = "https://thecollective-prod.nyc3.digitaloceanspaces.com/products/watches/132366_front_image.jpg";
-                item.nicknames = ["Panda"];
-                item.completeness_tags = ["Full Set", "White Tag"];
-                item.dial = "White Panda";
-                modified = true;
-              }
-              return item;
-            });
-            if (modified) {
-              localStorage.setItem('cl_live_dealer_posts', JSON.stringify(sanitized));
-            }
-            return sanitized;
+            return list;
           }
         }
       } catch (e) {
         console.warn("Could not read cl_live_dealer_posts from localStorage", e);
       }
-      // Return initial verified dealer post so user can immediately find it
-      return [SEED_POST_IT_LISTING];
+      return [];
     }
 
     function saveDealerPost(newListing) {
