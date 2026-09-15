@@ -2768,7 +2768,21 @@
       dir.classList.add('hidden');
       view.classList.remove('hidden');
 
-      const wtsObs = evidenceByRef[cleanKey] || rec.evidence_rows || [];
+      // Ensure Price Research evidence is strictly watches and deduplicated
+      const rawWtsObs = evidenceByRef[cleanKey] || rec.evidence_rows || [];
+      const seenObsSig = new Set();
+      const wtsObs = rawWtsObs.filter(it => {
+        // Exclude non-watches from price research calculations and evidence
+        const cat = (it.category || '').toLowerCase();
+        if (cat === 'handbags' || cat === 'jewelry' || cat === 'accessories' || cat === 'other luxury') return false;
+        
+        // Deduplicate repeated dealer re-broadcasts
+        const sig = `${it.from_name || it.from_number || ''}|${it.reference || ''}|${it.dial || ''}|${Math.round(it.price || 0)}`;
+        if (seenObsSig.has(sig)) return false;
+        seenObsSig.add(sig);
+        return true;
+      });
+
       const demandObs = rec.demand_signals || [];
       const cohortAll = (rec.cohorts && rec.cohorts['All Conditions']) || {};
       const ratio = cohortAll.wtb_wts_ratio !== undefined ? cohortAll.wtb_wts_ratio.toFixed(2) : ((rec.wts_count && rec.wts_count > 0) ? (rec.wtb_count / rec.wts_count).toFixed(2) : '0.00');

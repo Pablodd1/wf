@@ -59,12 +59,16 @@
     }
   ],
   "rewrites": [
+    { "source": "/", "destination": "/watch_listings_viewer.html" },
+    { "source": "/index.html", "destination": "/watch_listings_viewer.html" },
+    { "source": "/trading", "destination": "/watch_listings_viewer.html" },
     { "source": "/extract", "destination": "/extract.html" },
     { "source": "/extract.html", "destination": "/extract.html" },
     { "source": "/viewer", "destination": "/watch_listings_viewer.html" },
     { "source": "/watch_listings_viewer.html", "destination": "/watch_listings_viewer.html" },
     { "source": "/data/(.*)", "destination": "/data/$1" },
     { "source": "/marketplace/(.*)", "destination": "/marketplace/$1" },
-    { "source": "/((?!api/|marketplace/|data/|viewer|watch_listings_viewer.html).*)", "destination": "/index.html" }
+    { "source": "/app", "destination": "/app.html" },
+    { "source": "/((?!api/|marketplace/|data/|viewer|extract|watch_listings_viewer.html|images/|icons/).*)", "destination": "/watch_listings_viewer.html" }
   ]
 }
