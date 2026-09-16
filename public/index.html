@@ -512,13 +512,6 @@
         >
           Reference Check
         </button>
-        <button
-          id="navGlossary"
-          onclick="switchMainView('info')"
-          class="pb-1 border-b-2 border-transparent text-[#78716C] hover:text-[#1C1917] transition-all"
-        >
-          Glossary
-        </button>
       </nav>
 
       <!-- Auth & Session Indicator -->
@@ -582,7 +575,6 @@
       <button id="mobNavTrading" onclick="switchMainView('trading-floor')" class="text-[#8A5826] font-bold py-1 border-b-2 border-[#8A5826] transition">Trading Floor</button>
       <button id="mobNavResearch" onclick="switchMainView('price-research')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Price Research</button>
       <button id="mobNavDealers" onclick="switchMainView('dealers')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Reference Check</button>
-      <button id="mobNavGlossary" onclick="switchMainView('info')" class="hover:text-[#1C1917] py-1 border-b-2 border-transparent transition">Glossary</button>
       <button onclick="handleNavPostItClick()" class="text-[#9A7127] font-bold py-1 flex items-center gap-0.5">+ Post It</button>
     </div>
   </header>
@@ -2222,6 +2214,7 @@
           } catch(e) {}
           if (currentView === 'dealers') renderDealersDirectory();
           if (currentView === 'trading-floor') renderListings();
+          loadSyndicatesData();
         }).catch(err => {
           console.warn("Auxiliary data load error:", err);
           auxiliaryPromise = null;
@@ -5559,9 +5552,13 @@
     async function loadSyndicatesData() {
       if (allSyndicates.length > 0) return;
       try {
-        const res = await fetch('/data/all_dealer_groups.json');
-        if (res.ok) {
-          allSyndicates = await res.json();
+        let data = await fetchCatalogData('data/all_dealer_groups.json');
+        if (!data || !Array.isArray(data)) {
+          const res = await fetch('/data/all_dealer_groups.json');
+          if (res.ok) data = await res.json();
+        }
+        if (data && Array.isArray(data)) {
+          allSyndicates = data;
           renderSyndicates(allSyndicates);
         }
       } catch (e) {
