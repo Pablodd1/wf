@@ -460,11 +460,9 @@
   <!-- 2. PRIMARY NAVBAR (MarketNav) -->
   <header class="bg-[#F3ECDF] text-[#211B15] border-b border-[#E5DACB] sticky top-0 z-40 px-4 sm:px-8 py-3.5 shadow-sm">
     <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
-      <!-- Logo & Title -->
-      <a href="#/trading" onclick="switchMainView('trading-floor')" class="flex items-center space-x-3 cursor-pointer select-none">
-        <div class="w-8 h-8 rounded border border-[#9A7127] bg-[#FAF6F0] flex items-center justify-center p-0.5 shadow-inner overflow-hidden">
-          <img src="logo_cl_gold.png" alt="Curated Luxury" class="w-7 h-7 object-contain" />
-        </div>
+      <!-- Logo & Title (Pure Gold Laurel Crest, No Square Box) -->
+      <a href="#/trading" onclick="switchMainView('trading-floor')" class="flex items-center space-x-3 cursor-pointer select-none group">
+        <img src="logo_cl_gold.png" alt="Curated Luxury Crest" class="w-9 h-9 object-contain drop-shadow-xs group-hover:scale-105 transition-transform" />
         <div>
           <span class="font-serif font-bold text-base sm:text-lg tracking-[0.14em] uppercase text-[#1C1917]">Curated Luxury</span>
         </div>
@@ -2039,8 +2037,12 @@
           <span>🛡️ Admin Dashboard</span>
         </button>
       </div>
-      <div class="text-[11px] text-[#8A7E70]">
-        14 NE 1st Ave #1102, Miami, FL 33132 · © 2026 Curated Luxury.
+      <div class="flex items-center gap-3 text-[11px] text-[#8A7E70]">
+        <img src="logo_cl_gold.png" alt="Curated Luxury Crest" class="w-8 h-8 object-contain shrink-0 drop-shadow-xs" />
+        <div>
+          <span class="font-serif font-bold text-white uppercase tracking-wider block text-xs">Curated Luxury</span>
+          <span>14 NE 1st Ave #1102, Miami, FL 33132 · © 2026</span>
+        </div>
       </div>
     </div>
   </footer>
