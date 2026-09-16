@@ -8,6 +8,7 @@ const FILES = [
   'watch-silhouette.svg', 'icon-192.png', 'favicon-32.png', 'favicon.ico',
   'apple-touch-icon.png', 'icon-512.png', 'grid-pattern.svg', 'pp-watermark.svg',
   'manifest.webmanifest', 'extract.html', 'watch_listings_viewer.html', 'logo_cl_gold.png',
+  'home.html',
   'catalog.json', 'catalog-source-v1.json', 'master_catalog.json',
   'disambiguation_map.json', 'reference_images.json', 'parsedWatches.schema.json',
 ];
@@ -34,7 +35,8 @@ function preparePublicAssets(root) {
     fs.mkdirSync(dataTarget, { recursive: true });
     const essentialDataFiles = [
       'catalog_meta.json', 'listings_chunk_0.json',
-      'dealers_directory.json', 'price_research_data.json', 'evidence_by_ref.json'
+      'dealers_directory.json', 'price_research_data.json', 'evidence_by_ref.json',
+      'verified_dealer_syndicates.json', 'all_dealer_groups.json'
     ];
     for (const df of essentialDataFiles) {
       const srcFile = path.join(dataSource, df);

@@ -24,6 +24,21 @@ try {
     fs.copyFileSync(viewerSrc, distIndex);
     console.log('Successfully set watch_listings_viewer.html as dist/index.html for Vercel root homepage.');
   }
+
+  // Ensure home.html and /home route exist physically in dist/
+  const homeSrc = path.join(root, 'public', 'home.html');
+  const distHome = path.join(distDir, 'home.html');
+  const distHomeDir = path.join(distDir, 'home');
+  const distHomeIndex = path.join(distHomeDir, 'index.html');
+
+  if (fs.existsSync(distDir) && fs.existsSync(homeSrc)) {
+    fs.copyFileSync(homeSrc, distHome);
+    if (!fs.existsSync(distHomeDir)) {
+      fs.mkdirSync(distHomeDir, { recursive: true });
+    }
+    fs.copyFileSync(homeSrc, distHomeIndex);
+    console.log('Successfully set dist/home.html and dist/home/index.html for /home gateway route.');
+  }
 } catch (e) {
   console.warn('Notice on cleaning and root index setup:', e.message);
 }
