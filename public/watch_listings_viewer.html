@@ -613,10 +613,10 @@
             Trading Floor
           </h1>
           <p class="text-xs text-[#6B7280] mt-1.5" id="headerSubtitleCount">
-            Showing <strong class="text-[#1C1917]">25,000</strong> active on floor · <strong class="text-[#1C1917]">1,225,000</strong> catalog total (1,200,000 pending in background chunks)
+            Showing <strong class="text-[#1C1917]">1,224,288</strong> Watches · <strong class="text-[#8A5826]">1,710</strong> Luxury Items (Non-Watches) · <strong class="text-[#1C1917]">1,225,998</strong> Total Live Liquidity
           </p>
         </div>
-      <!-- LIVE CATALOG SYNC & PENDING STATUS BAR -->
+      <!-- LIVE CATALOG SYNC & REAL-TIME STATUS BAR -->
       <div class="mb-4 p-3.5 rounded-xl border border-[#E5DACB] bg-[#FAF6F0] shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-3">
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
@@ -636,9 +636,10 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button id="btnStreamNextChunk" onclick="loadNextChunk()" class="px-3.5 py-1.5 bg-[#8A5826] text-white text-xs font-bold rounded-lg hover:bg-[#653E23] transition flex items-center gap-1.5 shadow-xs cursor-pointer">
-            <span>⚡ Stream Next Chunk (+25,000)</span>
-          </button>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#EFE5D8] text-[#8A5826] border border-[#E5DACB]">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="terminalSyncStatusText">Full 1.22M+ Live Feed</span>
+          </span>
         </div>
       </div>
 
@@ -2373,11 +2374,27 @@
       const luxuryDisplay = document.getElementById('totalLuxuryDisplay');
       const breakdownDisplay = document.getElementById('totalListingsBreakdown');
       
-      const wCount = catalogMeta.total_watches || 1224288;
-      const lCount = catalogMeta.total_luxury_items || 1710;
-      const sCount = catalogMeta.total_singles || 148838;
+      let dynamicWatches = 0;
+      let dynamicLuxury = 0;
+      if (Array.isArray(ALL_LISTINGS)) {
+        for (let i = 0; i < ALL_LISTINGS.length; i++) {
+          const item = ALL_LISTINGS[i];
+          if (item && (item.is_user_post || item.is_live_post)) {
+            const cat = (item.category || '').toLowerCase();
+            if (cat === 'handbags' || cat === 'jewelry' || cat === 'accessories' || cat === 'luxury') {
+              dynamicLuxury++;
+            } else {
+              dynamicWatches++;
+            }
+          }
+        }
+      }
+
+      const wCount = (catalogMeta.total_watches || 1224288) + dynamicWatches;
+      const lCount = (catalogMeta.total_luxury_items || 1710) + dynamicLuxury;
+      const sCount = (catalogMeta.total_singles || 148838) + dynamicWatches + dynamicLuxury;
       const uCount = catalogMeta.total_unbundled || 1077160;
-      const tCount = catalogMeta.total_listings || (wCount + lCount);
+      const tCount = wCount + lCount;
 
       if (watchesDisplay) watchesDisplay.textContent = wCount.toLocaleString('en-US');
       if (luxuryDisplay) luxuryDisplay.textContent = lCount.toLocaleString('en-US');
@@ -2387,7 +2404,7 @@
       
       const sub = document.getElementById('headerSubtitleCount');
       if (sub) {
-        sub.innerHTML = `Showing <strong class="text-[#1C1917]">${ALL_LISTINGS.length.toLocaleString('en-US')}</strong> active in floor buffer · <strong class="text-[#1C1917]">${tCount.toLocaleString('en-US')}</strong> total verified catalog`;
+        sub.innerHTML = `Showing <strong class="text-[#1C1917]">${wCount.toLocaleString('en-US')}</strong> Watches · <strong class="text-[#8A5826]">${lCount.toLocaleString('en-US')}</strong> Luxury Items (Non-Watches) · <strong class="text-[#1C1917]">${tCount.toLocaleString('en-US')}</strong> Total Live Liquidity`;
       }
     }
 
