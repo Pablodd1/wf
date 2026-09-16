@@ -126,6 +126,9 @@ export function Footer() {
             <Link to="/info/glossary" className="transition-colors hover:text-white font-medium text-white/90">
               Glossary & FAQ
             </Link>
+            <a href="https://curatedlux.pages.dev/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#C9A96E] transition-colors hover:text-white font-medium">
+              CuratedLux Auth <ExternalLink size={11} />
+            </a>
             <Link to="/info/company" className="transition-colors hover:text-white">Company</Link>
             <Link to="/info/community" className="transition-colors hover:text-white">Community</Link>
             <Link to="/info/privacy" className="transition-colors hover:text-white">Privacy</Link>
