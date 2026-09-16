@@ -1391,13 +1391,247 @@
           Direct access to verified inventory across the world's most prestigious horological houses and luxury ateliers.
         </p>
       </div>
-      <div class="overflow-hidden rounded-xl border border-[#F0EAE1] bg-[#FAF8F5] p-3 sm:p-4">
-        <img
-          src="images/shop-favorite-brands.png"
-          alt="Shop Your Favorite Brand - Rolex, Patek Philippe, Audemars Piguet, Richard Mille, Cartier, Omega"
-          class="w-full h-auto object-contain mx-auto max-h-[340px]"
-          loading="lazy"
-        />
+            <!-- Interactive Transparent Luxury Brand Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 mb-6">
+        <!-- Rolex -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Rolex'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Geneva</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">ROLEX</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Cosmograph, Submariner, GMT</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Rolex')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.rolex.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Rolex Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Patek Philippe -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Patek Philippe'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Genève</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">PATEK PHILIPPE</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Nautilus, Aquanaut, Complications</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Patek Philippe')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.patek.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Patek Philippe Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Audemars Piguet -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Audemars Piguet'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Le Brassus</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">AUDEMARS PIGUET</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Royal Oak, Offshore, Concept</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Audemars Piguet')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.audemarspiguet.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Audemars Piguet Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Richard Mille -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Richard Mille'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Les Breuleux</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">RICHARD MILLE</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">RM 11, RM 35, RM 67</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Richard Mille')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.richardmille.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Richard Mille Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Cartier -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Cartier'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Paris</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">CARTIER</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Santos, Tank, Ballon Bleu</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Cartier')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.cartier.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Cartier Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Omega -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Omega'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Biel / Bienne</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">OMEGA</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Speedmaster, Seamaster, Constellation</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Omega')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.omegawatches.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Omega Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Hublot -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Hublot'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Nyon</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">HUBLOT</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Big Bang, Classic Fusion</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Hublot')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.hublot.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Hublot Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Breitling -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Breitling'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Grenchen</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">BREITLING</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Navitimer, Chronomat, Superocean</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Breitling')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.breitling.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Breitling Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- IWC Schaffhausen -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('IWC'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Schaffhausen</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">IWC</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Portugieser, Pilot's Watch, Portofino</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('IWC')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.iwc.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit IWC Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Panerai -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Panerai'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Firenze</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">PANERAI</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Luminor, Radiomir, Submersible</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Panerai')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.panerai.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Panerai Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Tudor -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Tudor'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Geneva</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">TUDOR</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Black Bay, Pelagos, Royal</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Tudor')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.tudorwatch.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Tudor Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Hermès -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Hermès'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Paris</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">HERMÈS</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Birkin, Kelly, H08, Cape Cod</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Hermès')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.hermes.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Hermès Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Chopard -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Chopard'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Meyrin</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">CHOPARD</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Alpine Eagle, Mille Miglia, Happy Hearts</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Chopard')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.chopard.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Chopard Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- A. Lange & Söhne -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('A. Lange & Söhne'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Glashütte</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">A. LANGE & SÖHNE</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Lange 1, Saxonia, Zeitwerk</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('A. Lange & Söhne')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.alange-soehne.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit A. Lange & Söhne Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Bvlgari -->
+        <div class="group relative flex flex-col justify-between p-4 rounded-xl border border-[#E5DACB] bg-[#FAF8F5]/80 hover:bg-white hover:border-[#C5A059] hover:shadow-md transition duration-200">
+          <div onclick="setBrandFilter('Bvlgari'); document.getElementById('tradingFloorSearch')?.scrollIntoView({behavior: 'smooth'});" class="cursor-pointer flex flex-col items-center text-center py-2">
+            <span class="text-[10px] font-mono tracking-widest text-[#C5A059] uppercase block mb-1">Roma</span>
+            <h3 class="font-serif text-lg font-bold text-[#1C1917] tracking-wider group-hover:text-[#8A5826] transition">BVLGARI</h3>
+            <p class="text-[11px] text-[#78716C] mt-1">Octo Finissimo, Serpenti, B.zero1</p>
+          </div>
+          <div class="pt-3 mt-2 border-t border-[#EFE7DC] flex items-center justify-between text-[10px]">
+            <button onclick="setBrandFilter('Bvlgari')" class="text-[#8A5826] font-semibold hover:underline cursor-pointer">Filter Inventory</button>
+            <a href="https://www.bulgari.com" target="_blank" rel="noreferrer" class="inline-flex items-center gap-0.5 text-[#A89F93] hover:text-[#1C1917] transition" title="Visit Bvlgari Official Website">
+              <span>Official</span>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
       </div>
       <div class="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-[#8A5826]">
         <button onclick="setBrandFilter('Rolex')" class="rounded-full border border-[#D7CCBC] bg-[#FAF6F0] px-3.5 py-1.5 hover:bg-[#EFE5D8] hover:border-[#9A7127] transition cursor-pointer">Rolex</button>
@@ -1502,27 +1736,47 @@
           </a>
         </div>
 
-        <!-- Community Groups -->
+                <!-- Community Groups -->
         <div>
-          <span class="text-[10px] font-bold uppercase tracking-widest text-[#C5A059] block mb-1">Community</span>
-          <h2 class="font-serif font-bold text-2xl text-white mb-2">Join Our Chats</h2>
-          <p class="text-xs text-[#8A7E70] mb-4">Be part of our vibrant community by joining our WhatsApp and Telegram groups.</p>
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-[#C5A059]">Community & Liquidity Network</span>
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#25211D] border border-[#3F3324] text-[9px] text-emerald-400 font-mono">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              335+ Private Wholesale Syndicates Monitored
+            </span>
+          </div>
+          <h2 class="font-serif font-bold text-2xl text-white mb-2">Official Broadcast & Community Desks</h2>
+          <p class="text-xs text-[#A89F93] mb-4 leading-relaxed">
+            Curated Luxury aggregates live secondary market liquidity across 335+ private dealer syndicates worldwide. Connect directly with our official intake and community desks below:
+          </p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-            <a href="https://chat.whatsapp.com/JEaK91DatRkLZFKMaJZYIH" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition">
-              <span class="text-[9px] font-mono text-[#C5A059] block uppercase">WhatsApp</span>
-              <strong class="text-white text-xs block truncate">B2B Watch Trading</strong>
+            <a href="https://chat.whatsapp.com/JEaK91DatRkLZFKMaJZYIH" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition group">
+              <div class="flex items-center justify-between">
+                <span class="text-[9px] font-mono text-[#C5A059] block uppercase">WhatsApp Verified Desk</span>
+                <span class="text-[10px] text-[#A89F93] group-hover:text-white transition">↗</span>
+              </div>
+              <strong class="text-white text-xs block truncate mt-0.5">B2B Watch Trading</strong>
             </a>
-            <a href="https://chat.whatsapp.com/CHLWqKgzO2Y1sdarNTAcEO" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition">
-              <span class="text-[9px] font-mono text-[#C5A059] block uppercase">WhatsApp</span>
-              <strong class="text-white text-xs block truncate">Announcements</strong>
+            <a href="https://chat.whatsapp.com/CHLWqKgzO2Y1sdarNTAcEO" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition group">
+              <div class="flex items-center justify-between">
+                <span class="text-[9px] font-mono text-[#C5A059] block uppercase">WhatsApp Verified Desk</span>
+                <span class="text-[10px] text-[#A89F93] group-hover:text-white transition">↗</span>
+              </div>
+              <strong class="text-white text-xs block truncate mt-0.5">Platform Announcements</strong>
             </a>
-            <a href="https://chat.whatsapp.com/DPhtxCrrxES5kyHeO7SmCb" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition">
-              <span class="text-[9px] font-mono text-[#C5A059] block uppercase">WhatsApp</span>
-              <strong class="text-white text-xs block truncate">Estate Jewelry</strong>
+            <a href="https://chat.whatsapp.com/DPhtxCrrxES5kyHeO7SmCb" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition group">
+              <div class="flex items-center justify-between">
+                <span class="text-[9px] font-mono text-[#C5A059] block uppercase">WhatsApp Verified Desk</span>
+                <span class="text-[10px] text-[#A89F93] group-hover:text-white transition">↗</span>
+              </div>
+              <strong class="text-white text-xs block truncate mt-0.5">Estate Jewelry & Gems</strong>
             </a>
-            <a href="https://t.me/watchfactsUS" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition">
-              <span class="text-[9px] font-mono text-[#C5A059] block uppercase">Telegram</span>
-              <strong class="text-white text-xs block truncate">Rolex US Only</strong>
+            <a href="https://t.me/watchfactsUS" target="_blank" class="p-3 bg-[#1C1917] border border-[#3F3324] rounded-lg hover:border-[#C5A059] transition group">
+              <div class="flex items-center justify-between">
+                <span class="text-[9px] font-mono text-[#C5A059] block uppercase">Telegram Verified Desk</span>
+                <span class="text-[10px] text-[#A89F93] group-hover:text-white transition">↗</span>
+              </div>
+              <strong class="text-white text-xs block truncate mt-0.5">Rolex Trading (US Only)</strong>
             </a>
           </div>
         </div>
