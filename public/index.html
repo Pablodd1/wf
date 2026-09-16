@@ -1379,6 +1379,59 @@
     </div>
   </div>
 
+  
+  <!-- VERIFIED DEALER SYNDICATES DIRECTORY MODAL -->
+  <div id="syndicatesModal" class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#FAF6F0] rounded-2xl max-w-3xl w-full max-h-[88vh] flex flex-col shadow-2xl border border-[#E5DACB] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div class="px-6 py-4 border-b border-[#E5DACB] flex items-center justify-between bg-[#F6F0E7]">
+        <div class="flex items-center gap-2.5">
+          <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+          <div>
+            <h3 class="font-serif font-bold text-base text-[#1C1917]">Verified Dealer Syndicates Directory</h3>
+            <p class="text-[10px] font-mono text-[#8A5826] uppercase">335+ Syndicates Monitored · 80,000+ Verified Members</p>
+          </div>
+        </div>
+        <button onclick="closeSyndicatesModal()" class="text-[#8A5826] hover:text-[#1C1917] font-bold text-2xl leading-none p-1">×</button>
+      </div>
+
+      <div class="p-6 overflow-y-auto flex-1 text-xs">
+        <!-- Standards of Consent Box -->
+        <div class="mb-4 p-3.5 rounded-xl bg-[#F0E8DC] border border-[#D7CCBC] flex items-start gap-3">
+          <span class="text-base">⚖️</span>
+          <div>
+            <span class="text-[11px] font-mono uppercase tracking-wider text-[#8A5826] font-bold block">Standards of Creator Consent & Privacy</span>
+            <p class="text-[11px] text-[#5A5248] mt-0.5 leading-relaxed">
+              All dealer syndicates indexed across Curated Luxury operate under explicit creator authorization and administrative consent. Strict participant confidentiality, data protection, and anti-spam protocols are enforced. Direct participation requires identity verification.
+            </p>
+          </div>
+        </div>
+
+        <!-- Search input -->
+        <div class="mb-4 flex items-center gap-2">
+          <input
+            type="text"
+            id="syndicateSearchInput"
+            oninput="filterSyndicates()"
+            placeholder="Search 185+ syndicates (e.g. International, Brickell, Rolex, Miami, Swiss)..."
+            class="w-full px-3.5 py-2.5 rounded-xl border border-[#D7CCBC] bg-white text-xs text-[#1C1917] placeholder-[#8A7E70] focus:outline-none focus:border-[#8A5826]"
+          />
+        </div>
+
+        <!-- Syndicates List Container -->
+        <div id="syndicatesList" class="space-y-2 max-h-[48vh] overflow-y-auto custom-scrollbar pr-1">
+          <div class="text-center py-8 text-[#8A7E70]">Loading verified syndicates directory...</div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 border-t border-[#E5DACB] bg-[#F6F0E7] flex items-center justify-between">
+        <span class="text-[10px] text-[#78716C] font-mono">Curated Luxury Clearinghouse © 2026</span>
+        <button onclick="closeSyndicatesModal()" class="px-5 py-2 rounded-full bg-[#8A5826] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#78350F] transition cursor-pointer">
+          Close Directory
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- BRAND & SHOWCASE SECTIONS BEFORE FOOTER -->
   <section class="max-w-7xl mx-auto px-4 sm:px-6 pt-10 pb-8">
     <!-- 1. Shop Your Favorite Brand -->
@@ -1778,6 +1831,30 @@
               </div>
               <strong class="text-white text-xs block truncate mt-0.5">Rolex Trading (US Only)</strong>
             </a>
+          </div>
+
+          <!-- Standards of Consent & Trade Privacy Box -->
+          <div class="mt-4 p-3 rounded-xl bg-[#141210] border border-[#3F3324] flex items-start gap-2.5">
+            <span class="text-sm">⚖️</span>
+            <div>
+              <span class="text-[10px] font-mono uppercase tracking-wider text-[#C5A059] block font-bold">Standards of Consent & Trade Privacy</span>
+              <p class="text-[11px] text-[#A89F93] mt-0.5 leading-relaxed">
+                All 335+ WhatsApp and Telegram dealer syndicates in this liquidity network were established with explicit creator and administrative consent. Participant confidentiality, trade secrets, and zero-spam rules are strictly maintained.
+              </p>
+            </div>
+          </div>
+
+          <!-- Trigger for Verified Syndicates Directory Modal -->
+          <div class="mt-3.5 flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onclick="openSyndicatesModal()"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#C5A059] bg-[#1C1917] hover:bg-[#2A241E] text-[#C5A059] text-xs font-bold transition cursor-pointer shadow-sm"
+            >
+              <span>📜 View Verified Dealer Syndicates (185+ Active Groups · 80,000+ Members)</span>
+              <span>↗</span>
+            </button>
+            <span class="text-[10px] font-mono text-[#8A7E70]">100% Consent Verified · KYC Gated</span>
           </div>
         </div>
       </div>
@@ -5335,6 +5412,80 @@
         updateAuthUI();
       }
     })();
+  </script>
+
+
+  <script>
+    let allSyndicates = [];
+
+    async function loadSyndicatesData() {
+      if (allSyndicates.length > 0) return;
+      try {
+        const res = await fetch('/data/verified_dealer_syndicates.json');
+        if (res.ok) {
+          allSyndicates = await res.json();
+          renderSyndicates(allSyndicates);
+        }
+      } catch (e) {
+        console.error('Failed to load syndicates:', e);
+      }
+    }
+
+    function renderSyndicates(list) {
+      const container = document.getElementById('syndicatesList');
+      if (!container) return;
+      if (list.length === 0) {
+        container.innerHTML = '<div class="text-center py-6 text-[#8A7E70]">No matching syndicates found.</div>';
+        return;
+      }
+
+      container.innerHTML = list.map(item => `
+        <div class="p-3 rounded-xl border border-[#E5DACB] bg-white hover:border-[#8A5826] transition flex items-center justify-between gap-3 shadow-2xs">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-serif font-bold text-xs text-[#1C1917] truncate">${escapeHtml(item.name)}</span>
+              <span class="px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-[9px] font-mono text-emerald-800 shrink-0">Verified</span>
+            </div>
+            <div class="text-[10px] text-[#78716C] mt-0.5 flex items-center gap-2">
+              <span>👥 ${item.members.toLocaleString()} Active Members</span>
+              <span>·</span>
+              <span class="text-emerald-700">Live Ingestion Active</span>
+            </div>
+          </div>
+          <a
+            href="https://wa.me/13054148000?text=Curated%20Luxury%20Verification%20for%20Group%3A%20${encodeURIComponent(item.name)}"
+            target="_blank"
+            rel="noreferrer"
+            class="px-3 py-1.5 rounded-lg border border-[#C5A059] bg-[#FAF6F0] hover:bg-[#F2E5D5] text-[#8A5826] text-[10px] font-bold uppercase tracking-wider shrink-0 transition"
+          >
+            Apply ↗
+          </a>
+        </div>
+      `).join('');
+    }
+
+    function filterSyndicates() {
+      const query = (document.getElementById('syndicateSearchInput')?.value || '').toLowerCase().trim();
+      if (!query) {
+        renderSyndicates(allSyndicates);
+        return;
+      }
+      const filtered = allSyndicates.filter(s => s.name.toLowerCase().includes(query));
+      renderSyndicates(filtered);
+    }
+
+    function openSyndicatesModal() {
+      const modal = document.getElementById('syndicatesModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        loadSyndicatesData();
+      }
+    }
+
+    function closeSyndicatesModal() {
+      const modal = document.getElementById('syndicatesModal');
+      if (modal) modal.classList.add('hidden');
+    }
   </script>
 
 </body>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0C0A09" />
+  <meta name="description" content="Curated Luxury — Unified Institutional Secondary Market Gateway for Collectors, Verified Dealers, and Administrators." />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <title>Curated Luxury | Institutional Gateway</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background-color: #0C0A09;
+      color: #FAF6F0;
+    }
+    .font-cinzel {
+      font-family: 'Cinzel', serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .gold-gradient-text {
+      background: linear-gradient(135deg, #F5E6C8 0%, #C5A059 50%, #8A5826 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .gold-button-gradient {
+      background: linear-gradient(135deg, #C5A059 0%, #9A7127 100%);
+    }
+    .gold-button-gradient:hover {
+      background: linear-gradient(135deg, #D4B26F 0%, #AA7F30 100%);
+    }
+    .radial-glow {
+      background: radial-gradient(circle at 50% 35%, rgba(197, 160, 89, 0.12) 0%, rgba(12, 10, 9, 0) 70%);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-[#C5A059] selection:text-[#0C0A09] relative overflow-x-hidden radial-glow">
+
+  <!-- Subtle ambient luxury background grid lines -->
+  <div class="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(#3F3324_1px,transparent_1px)] [background-size:24px_24px]"></div>
+
+  <!-- TOP MINIMAL NAV -->
+  <header class="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between relative z-10">
+    <a href="/" class="flex items-center gap-3 group">
+      <div class="w-9 h-9 rounded-full border border-[#C5A059]/60 flex items-center justify-center bg-[#171412] group-hover:border-[#C5A059] transition duration-300">
+        <svg width="20" height="20" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <circle cx="20" cy="20" r="17.5" stroke="#C5A059" stroke-width="1.2"></circle>
+          <path d="M14 11 L26 11 L30 16 L30 24 L26 29 L14 29 L10 24 L10 16 Z" stroke="#C5A059" stroke-width="1.4" fill="rgba(197, 160, 89, 0.15)"></path>
+          <path d="M17 15.5 L23 15.5 L25.5 18 L25.5 22 L23 24.5 L17 24.5 L14.5 22 L14.5 18 Z" stroke="#C5A059" stroke-width="0.8"></path>
+        </svg>
+      </div>
+      <div class="flex flex-col">
+        <span class="font-cinzel text-sm font-bold tracking-[0.2em] text-[#FAF6F0] group-hover:text-[#C5A059] transition duration-300">CURATED LUXURY</span>
+        <span class="text-[9px] font-mono tracking-widest text-[#A89F93] uppercase">Institutional Secondary Gateway</span>
+      </div>
+    </a>
+
+    <a href="/" class="text-xs font-semibold text-[#A89F93] hover:text-[#C5A059] flex items-center gap-1.5 transition">
+      <span>Public Trading Floor</span>
+      <span class="text-sm">↗</span>
+    </a>
+  </header>
+
+  <!-- MAIN LOGIN CONTAINER (CENTERED) -->
+  <main class="flex-1 flex items-center justify-center px-4 py-8 relative z-10">
+    <div class="w-full max-w-md bg-[#161311]/90 backdrop-blur-xl border border-[#3F3324] rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/80">
+      
+      <!-- Card Header -->
+      <div class="text-center mb-6">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#231F1C] border border-[#4A3D2C] text-[10px] text-[#C5A059] font-mono mb-3">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Encrypted Gateway · 256-Bit TLS</span>
+        </div>
+        <h1 class="font-cinzel text-xl sm:text-2xl font-bold tracking-wider gold-gradient-text">
+          AUTHENTICATED ACCESS
+        </h1>
+        <p class="text-xs text-[#8A7E70] mt-1.5">
+          Select credentials to enter your private environment
+        </p>
+      </div>
+
+      <!-- Segmented Role Selector -->
+      <div class="grid grid-cols-3 gap-1 bg-[#0E0C0B] p-1 rounded-xl border border-[#2B2319] mb-6 text-xs font-medium">
+        <button
+          id="tabUser"
+          onclick="switchRole('user')"
+          class="py-2 rounded-lg text-center transition duration-200 bg-[#25201B] text-[#C5A059] font-semibold shadow-xs"
+        >
+          Collector
+        </button>
+        <button
+          id="tabDealer"
+          onclick="switchRole('dealer')"
+          class="py-2 rounded-lg text-center transition duration-200 text-[#8A7E70] hover:text-white"
+        >
+          Dealer
+        </button>
+        <button
+          id="tabAdmin"
+          onclick="switchRole('admin')"
+          class="py-2 rounded-lg text-center transition duration-200 text-[#8A7E70] hover:text-white"
+        >
+          Command
+        </button>
+      </div>
+
+      <!-- ROLE 1: COLLECTOR / USER FORM -->
+      <div id="formUser" class="space-y-4">
+        <div>
+          <label class="block text-[11px] font-mono uppercase tracking-wider text-[#A89F93] mb-1.5">Email or VIP Account ID</label>
+          <input
+            type="email"
+            id="userIdentifier"
+            placeholder="collector@curatedluxury.space"
+            class="w-full px-3.5 py-2.5 rounded-lg bg-[#0C0A09] border border-[#3F3324] text-xs text-white placeholder-[#5A5248] focus:outline-none focus:border-[#C5A059] transition"
+          />
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-[11px] font-mono uppercase tracking-wider text-[#A89F93]">Private Passkey / PIN</label>
+            <a href="#" class="text-[10px] text-[#C5A059] hover:underline">Reset key?</a>
+          </div>
+          <input
+            type="password"
+            id="userSecret"
+            placeholder="••••••••••••"
+            class="w-full px-3.5 py-2.5 rounded-lg bg-[#0C0A09] border border-[#3F3324] text-xs text-white placeholder-[#5A5248] focus:outline-none focus:border-[#C5A059] transition"
+          />
+        </div>
+
+        <button
+          onclick="handleAuth('user')"
+          class="w-full py-3 rounded-lg gold-button-gradient text-[#12100E] text-xs font-bold uppercase tracking-wider transition shadow-md cursor-pointer hover:shadow-[#C5A059]/20"
+        >
+          Enter Private Vault
+        </button>
+
+        <div class="pt-2 flex items-center justify-center">
+          <button
+            onclick="handleBiometric()"
+            class="text-[11px] text-[#A89F93] hover:text-[#C5A059] flex items-center gap-1.5 transition"
+          >
+            <span>✨</span>
+            <span>Authenticate with Passkey / FaceID</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ROLE 2: VERIFIED DEALER FORM (HIDDEN BY DEFAULT) -->
+      <div id="formDealer" class="space-y-4 hidden">
+        <div>
+          <label class="block text-[11px] font-mono uppercase tracking-wider text-[#A89F93] mb-1.5">WhatsApp Number / Dealer ID</label>
+          <input
+            type="text"
+            id="dealerIdentifier"
+            placeholder="+1 (555) 000-0000"
+            class="w-full px-3.5 py-2.5 rounded-lg bg-[#0C0A09] border border-[#3F3324] text-xs text-white placeholder-[#5A5248] focus:outline-none focus:border-[#C5A059] transition"
+          />
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-[11px] font-mono uppercase tracking-wider text-[#A89F93]">Syndicate PIN / OTP</label>
+            <span class="text-[10px] text-[#8A7E70]">Consent-gated KYC</span>
+          </div>
+          <input
+            type="password"
+            id="dealerPin"
+            placeholder="6-digit security code"
+            maxlength="6"
+            class="w-full px-3.5 py-2.5 rounded-lg bg-[#0C0A09] border border-[#3F3324] text-xs text-white placeholder-[#5A5248] focus:outline-none focus:border-[#C5A059] transition font-mono tracking-widest"
+          />
+        </div>
+
+        <button
+          onclick="handleAuth('dealer')"
+          class="w-full py-3 rounded-lg gold-button-gradient text-[#12100E] text-xs font-bold uppercase tracking-wider transition shadow-md cursor-pointer hover:shadow-[#C5A059]/20"
+        >
+          Access Wholesale Terminal
+        </button>
+
+        <div class="pt-2 text-center">
+          <a href="/#/dealer" class="text-[11px] text-[#C5A059] hover:underline">
+            New wholesale dealer? Request verification ↗
+          </a>
+        </div>
+      </div>
+
+      <!-- ROLE 3: ADMINISTRATOR COMMAND FORM (HIDDEN BY DEFAULT) -->
+      <div id="formAdmin" class="space-y-4 hidden">
+        <div>
+          <label class="block text-[11px] font-mono uppercase tracking-wider text-[#A89F93] mb-1.5">Administrator ID</label>
+          <input
+            type="text"
+            id="adminIdentifier"
+            value="admin"
+            class="w-full px-3.5 py-2.5 rounded-lg bg-[#0C0A09] border border-[#3F3324] text-xs text-white placeholder-[#5A5248] focus:outline-none focus:border-[#C5A059] transition font-mono"
+          />
+        </div>
+        <div>
+          <label class="block text-[11px] font-mono uppercase tracking-wider text-[#A89F93] mb-1.5">Command Master Key / Token</label>
+          <input
+            type="password"
+            id="adminKey"
+            placeholder="Enter security token"
+            class="w-full px-3.5 py-2.5 rounded-lg bg-[#0C0A09] border border-[#3F3324] text-xs text-white placeholder-[#5A5248] focus:outline-none focus:border-[#C5A059] transition"
+          />
+        </div>
+
+        <button
+          onclick="handleAuth('admin')"
+          class="w-full py-3 rounded-lg bg-red-950/80 border border-red-700/50 hover:bg-red-900 text-red-100 text-xs font-bold uppercase tracking-wider transition shadow-md cursor-pointer"
+        >
+          Initialize Command Center
+        </button>
+
+        <div class="pt-2 text-center">
+          <a href="/#/admin" class="text-[11px] text-[#8A7E70] hover:text-[#C5A059] transition font-mono">
+            Direct Admin Cockpit Jump ↗
+          </a>
+        </div>
+      </div>
+
+      <!-- Feedback / Alert Banner -->
+      <div id="authAlert" class="mt-4 p-2.5 rounded-lg text-xs hidden text-center"></div>
+
+      <!-- Privacy & Consent Standard Badge -->
+      <div class="mt-6 pt-4 border-t border-[#25201B] text-center">
+        <p class="text-[10px] text-[#78716C] leading-relaxed">
+          Operating under Verified Secondary Market Consent & Privacy Standards.<br />
+          Trade confidentiality is cryptographically enforced.
+        </p>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- BOTTOM FOOTER -->
+  <footer class="w-full max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#78716C] relative z-10 border-t border-[#25201B]/50">
+    <div class="flex items-center gap-3">
+      <span>Curated Luxury Clearinghouse © 2026</span>
+      <span>·</span>
+      <span>Geneva · Miami · Dubai · Hong Kong</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <a href="/privacy" class="hover:text-[#C5A059] transition">Privacy Standards</a>
+      <a href="/terms" class="hover:text-[#C5A059] transition">Terms of Settlement</a>
+      <a href="/" class="text-[#C5A059] hover:underline font-semibold">Enter Trading Floor ↗</a>
+    </div>
+  </footer>
+
+  <script>
+    let currentRole = 'user';
+
+    function switchRole(role) {
+      currentRole = role;
+      
+      const tabUser = document.getElementById('tabUser');
+      const tabDealer = document.getElementById('tabDealer');
+      const tabAdmin = document.getElementById('tabAdmin');
+      
+      const formUser = document.getElementById('formUser');
+      const formDealer = document.getElementById('formDealer');
+      const formAdmin = document.getElementById('formAdmin');
+      const alertBox = document.getElementById('authAlert');
+
+      alertBox.classList.add('hidden');
+
+      // Reset tabs
+      [tabUser, tabDealer, tabAdmin].forEach(tab => {
+        tab.className = 'py-2 rounded-lg text-center transition duration-200 text-[#8A7E70] hover:text-white';
+      });
+
+      // Hide forms
+      formUser.classList.add('hidden');
+      formDealer.classList.add('hidden');
+      formAdmin.classList.add('hidden');
+
+      if (role === 'user') {
+        tabUser.className = 'py-2 rounded-lg text-center transition duration-200 bg-[#25201B] text-[#C5A059] font-semibold shadow-xs';
+        formUser.classList.remove('hidden');
+      } else if (role === 'dealer') {
+        tabDealer.className = 'py-2 rounded-lg text-center transition duration-200 bg-[#25201B] text-[#C5A059] font-semibold shadow-xs';
+        formDealer.classList.remove('hidden');
+      } else if (role === 'admin') {
+        tabAdmin.className = 'py-2 rounded-lg text-center transition duration-200 bg-red-950/60 text-red-300 font-semibold shadow-xs border border-red-800/40';
+        formAdmin.classList.remove('hidden');
+      }
+    }
+
+    function handleAuth(role) {
+      const alertBox = document.getElementById('authAlert');
+      alertBox.classList.remove('hidden');
+
+      if (role === 'user') {
+        alertBox.className = 'mt-4 p-2.5 rounded-lg text-xs text-center border border-emerald-500/30 bg-emerald-500/10 text-emerald-400';
+        alertBox.innerHTML = '✨ VIP Collector session verified. Entering Private Vault...';
+        setTimeout(() => {
+          window.location.href = '/trading';
+        }, 800);
+      } else if (role === 'dealer') {
+        alertBox.className = 'mt-4 p-2.5 rounded-lg text-xs text-center border border-[#C5A059]/40 bg-[#C5A059]/10 text-[#FAF6F0]';
+        alertBox.innerHTML = '⚖️ Dealer credential recognized. Transferring to Wholesale Terminal...';
+        setTimeout(() => {
+          window.location.href = '/#/dealer/workspace';
+        }, 800);
+      } else if (role === 'admin') {
+        alertBox.className = 'mt-4 p-2.5 rounded-lg text-xs text-center border border-purple-500/40 bg-purple-500/10 text-purple-300';
+        alertBox.innerHTML = '🛡️ Master Security Key Accepted. Initializing Command Center...';
+        setTimeout(() => {
+          window.location.href = '/#/admin';
+        }, 800);
+      }
+    }
+
+    function handleBiometric() {
+      const alertBox = document.getElementById('authAlert');
+      alertBox.classList.remove('hidden');
+      alertBox.className = 'mt-4 p-2.5 rounded-lg text-xs text-center border border-cyan-500/30 bg-cyan-500/10 text-cyan-300';
+      alertBox.innerHTML = '🔒 Biometric sensor active. Confirming device passkey...';
+      setTimeout(() => {
+        alertBox.className = 'mt-4 p-2.5 rounded-lg text-xs text-center border border-emerald-500/30 bg-emerald-500/10 text-emerald-400';
+        alertBox.innerHTML = '✅ Biometric authenticated. Entering Vault...';
+        setTimeout(() => {
+          window.location.href = '/trading';
+        }, 600);
+      }, 900);
+    }
+  </script>
+</body>
+</html>

@@ -67,8 +67,9 @@
     { "source": "/viewer", "destination": "/watch_listings_viewer.html" },
     { "source": "/watch_listings_viewer.html", "destination": "/watch_listings_viewer.html" },
     { "source": "/data/(.*)", "destination": "/data/$1" },
-    { "source": "/marketplace/(.*)", "destination": "/marketplace/$1" },
+    { "source": "/home", "destination": "/home.html" },
+    { "source": "/home.html", "destination": "/home.html" },
     { "source": "/app", "destination": "/app.html" },
-    { "source": "/((?!api/|marketplace/|data/|viewer|extract|watch_listings_viewer.html|images/|icons/|robots\\.txt|sitemap\\.xml|favicon|apple-touch).*)", "destination": "/watch_listings_viewer.html" }
+    { "source": "/((?!api/|marketplace/|data/|viewer|extract|home|home\\.html|watch_listings_viewer.html|images/|icons/|robots\\.txt|sitemap\\.xml|favicon|apple-touch).*)", "destination": "/watch_listings_viewer.html" }
   ]
 }
