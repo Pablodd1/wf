@@ -622,18 +622,23 @@
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
           <div class="flex flex-col gap-1">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span class="font-bold text-[#1C1917] text-sm"><strong id="totalWatchesDisplay" class="text-[#1C1917]">1,223,305</strong> Watches</span>
+              <span class="font-bold text-[#1C1917] text-sm"><strong id="totalWatchesDisplay" class="text-[#1C1917]">1,224,288</strong> Watches</span>
               <span class="text-[#8A5826] font-mono">·</span>
-              <span class="font-bold text-[#8A5826] text-sm"><strong id="totalLuxuryDisplay" class="text-[#8A5826]">1,695</strong> Luxury Items (Non-Watches)</span>
+              <span class="font-bold text-[#8A5826] text-sm"><strong id="totalLuxuryDisplay" class="text-[#8A5826]">1,710</strong> Luxury Items (Non-Watches)</span>
             </div>
             <div class="flex items-center flex-wrap gap-2 text-[11px] text-[#6B7280]">
               <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>Live Chats &amp; OD Synced</span>
               </span>
-              <span class="text-[11px] text-[#78716C] font-mono">Real-time trading buffer</span>
+              <span class="text-[11px] text-[#78716C] font-mono">Real-time trading buffer · <strong id="totalListingsBreakdown" class="text-[#1C1917]">1,225,998 Total Verified Listings (148,838 Singles + 1,077,160 Unbundled)</strong></span>
             </div>
           </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnStreamNextChunk" onclick="loadNextChunk()" class="px-3.5 py-1.5 bg-[#8A5826] text-white text-xs font-bold rounded-lg hover:bg-[#653E23] transition flex items-center gap-1.5 shadow-xs cursor-pointer">
+            <span>⚡ Stream Next Chunk (+25,000)</span>
+          </button>
         </div>
       </div>
 
@@ -949,6 +954,7 @@
 
       <!-- CARDS CONTAINER -->
       <main class="flex-1 flex flex-col min-w-0" style="width: 100%; max-width: 1200px;">
+        <div id="referenceGlobalCountBanner" class="hidden mb-4"></div>
         <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
         <div id="paginationControls" class="flex items-center justify-center gap-2 mt-10 mb-8"></div>
       </main>
@@ -1486,12 +1492,12 @@
             Miami, FL 33132 · United States
           </p>
           <a
-            href="https://maps.google.com/?q=14+NE+1st+Ave+%231102,+Miami,+FL+33132"
+            href="https://www.google.com/maps/dir/?api=1&destination=14+NE+1st+Ave+%231102,+Miami,+FL+33132"
             target="_blank"
             rel="noreferrer"
-            class="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C5A059] hover:underline"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#C5A059] text-[#12100E] text-xs font-bold hover:bg-[#D4B06A] transition shadow-xs cursor-pointer"
           >
-            <span>📍 Open in Google Maps</span>
+            <span>🧭 Get Turn-by-Turn Directions</span>
             <span class="text-[10px]">↗</span>
           </a>
         </div>
@@ -1520,6 +1526,56 @@
             </a>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- FULL-WIDTH INTERACTIVE HEADQUARTERS MAP & NAVIGATION -->
+    <div class="border-b border-[#25211D] bg-[#171412]/70 px-6 py-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-2">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-[#C5A059] animate-pulse shrink-0"></span>
+            <span class="text-xs font-serif font-bold text-white tracking-wide">Curated Luxury Miami Global Headquarters Navigation Map</span>
+            <span class="text-[10px] text-[#A89F93]">· 14 NE 1st Ave #1102, Miami, FL 33132</span>
+          </div>
+          <a
+            href="https://www.google.com/maps/dir/?api=1&destination=14+NE+1st+Ave+%231102,+Miami,+FL+33132"
+            target="_blank"
+            rel="noreferrer"
+            class="inline-flex items-center gap-1 text-xs font-bold text-[#C5A059] hover:underline"
+          >
+            <span>Open Directions in Google Maps</span>
+            <span class="text-[10px]">↗</span>
+          </a>
+        </div>
+        <a
+          href="https://www.google.com/maps/dir/?api=1&destination=14+NE+1st+Ave+%231102,+Miami,+FL+33132"
+          target="_blank"
+          rel="noreferrer"
+          class="block group relative w-full h-64 sm:h-72 md:h-80 rounded-2xl overflow-hidden border border-[#3F3324] hover:border-[#C5A059] transition shadow-xl bg-[#0F0D0B] cursor-pointer"
+          title="Click to get directions to 14 NE 1st Ave #1102, Miami, FL 33132"
+        >
+          <iframe
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3592.8847842323864!2d-80.1947230238865!3d25.774351608248197!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x88d9b69c8a14b43d%3A0x6b26dcf5a9143ee6!2s14%20NE%201st%20Ave%20%231102%2C%20Miami%2C%20FL%2033132!5e0!3m2!1sen!2sus!4v1726484000000!5m2!1sen!2sus"
+            class="w-full h-full border-0 pointer-events-none filter contrast-[1.08] saturate-[0.85]"
+            allowfullscreen=""
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"
+          ></iframe>
+          <div class="absolute inset-0 bg-gradient-to-t from-[#12100E]/80 via-transparent to-black/20 pointer-events-none group-hover:from-[#12100E]/40 transition"></div>
+          <div class="absolute bottom-4 left-6 pointer-events-none flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full bg-[#C5A059] text-[#12100E] flex items-center justify-center font-bold text-base shadow-md shrink-0">
+              📍
+            </div>
+            <div>
+              <div class="text-white font-serif font-bold text-sm">Miami Global Headquarters · Suite #1102</div>
+              <div class="text-[#C5A059] text-xs font-semibold flex items-center gap-1 group-hover:underline">
+                <span>Click map to start turn-by-turn directions</span>
+                <span>↗</span>
+              </div>
+            </div>
+          </div>
+        </a>
       </div>
     </div>
 
@@ -1557,6 +1613,8 @@
     let evidenceByRef = {};
     let sortedBrands = [];
     let catalogMeta = {};
+    let referenceCatalogIndex = {};
+    window.referenceCatalogIndex = referenceCatalogIndex;
     let auxiliaryLoaded = false;
 
     // Buyer intent recognition regex: classifies WTB, LTB, NTQ, ISO, LF, "Need [ref]", "Looking for..." as buyer requests
@@ -1590,8 +1648,10 @@
 
     async function loadCatalog() {
       try {
-        // 1. Load catalog metadata (instant 5KB)
+        // 1. Load catalog metadata & reference index
         catalogMeta = (await fetchCatalogData('data/catalog_meta.json')) || {};
+        referenceCatalogIndex = (await fetchCatalogData('data/reference_catalog_index.json')) || {};
+        window.referenceCatalogIndex = referenceCatalogIndex;
         sortedBrands = catalogMeta.sorted_brands || [];
         initBrandDropdowns();
         initMarquee(catalogMeta.ticker_samples || []);
@@ -1859,14 +1919,104 @@
     function updateCatalogStatusDisplays() {
       const watchesDisplay = document.getElementById('totalWatchesDisplay');
       const luxuryDisplay = document.getElementById('totalLuxuryDisplay');
-      if (watchesDisplay) watchesDisplay.textContent = (catalogMeta.total_watches || 1223305).toLocaleString('en-US');
-      if (luxuryDisplay) luxuryDisplay.textContent = (catalogMeta.total_luxury_items || 1695).toLocaleString('en-US');
+      const breakdownDisplay = document.getElementById('totalListingsBreakdown');
+      
+      const wCount = catalogMeta.total_watches || 1224288;
+      const lCount = catalogMeta.total_luxury_items || 1710;
+      const sCount = catalogMeta.total_singles || 148838;
+      const uCount = catalogMeta.total_unbundled || 1077160;
+      const tCount = catalogMeta.total_listings || (wCount + lCount);
+
+      if (watchesDisplay) watchesDisplay.textContent = wCount.toLocaleString('en-US');
+      if (luxuryDisplay) luxuryDisplay.textContent = lCount.toLocaleString('en-US');
+      if (breakdownDisplay) {
+        breakdownDisplay.textContent = `${tCount.toLocaleString('en-US')} Total Verified Listings (${sCount.toLocaleString('en-US')} Singles + ${uCount.toLocaleString('en-US')} Unbundled)`;
+      }
       
       const sub = document.getElementById('headerSubtitleCount');
       if (sub) {
-        sub.innerHTML = 'Verified Luxury Trading Floor · Direct Dealer Inquiries';
+        sub.innerHTML = `Showing <strong class="text-[#1C1917]">${ALL_LISTINGS.length.toLocaleString('en-US')}</strong> active in floor buffer · <strong class="text-[#1C1917]">${tCount.toLocaleString('en-US')}</strong> total verified catalog`;
       }
     }
+
+    function getActiveReferenceData(query) {
+      if (!query || !referenceCatalogIndex) return null;
+      const cleanKey = query.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      if (!cleanKey) return null;
+      if (referenceCatalogIndex[cleanKey]) return referenceCatalogIndex[cleanKey];
+      for (const k in referenceCatalogIndex) {
+        const item = referenceCatalogIndex[k];
+        if (k === cleanKey || (item.reference && item.reference.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === cleanKey)) {
+          return item;
+        }
+      }
+      // Partial prefix search
+      if (cleanKey.length >= 4) {
+        for (const k in referenceCatalogIndex) {
+          if (k.startsWith(cleanKey) || cleanKey.startsWith(k)) {
+            return referenceCatalogIndex[k];
+          }
+        }
+      }
+      return null;
+    }
+    window.getActiveReferenceData = getActiveReferenceData;
+
+    async function streamNextMatchingChunkForRef(refKey) {
+      const refData = referenceCatalogIndex[refKey] || getActiveReferenceData(refKey);
+      if (!refData || !refData.chunks) return;
+      const remaining = refData.chunks.filter(c => !loadedChunkIndices.has(c));
+      if (remaining.length === 0) return;
+      const targetChunkIdx = remaining[0];
+      
+      const statusBanner = document.getElementById('referenceGlobalCountBanner');
+      const loadBtn = document.getElementById('btnStreamNextRefChunk');
+      if (loadBtn) loadBtn.innerHTML = `<span>⏳ Streaming Chunk ${targetChunkIdx + 1}...</span>`;
+      
+      try {
+        const chunk = await fetchCatalogData(`data/listings_chunk_${targetChunkIdx}.json`);
+        if (chunk && Array.isArray(chunk)) {
+          for (let j = 0; j < chunk.length; j++) {
+            ALL_LISTINGS.push(chunk[j]);
+            listingsById.set(chunk[j].id, chunk[j]);
+          }
+          loadedChunkIndices.add(targetChunkIdx);
+          currentChunkIndex = Math.max(currentChunkIndex, targetChunkIdx);
+          updateCatalogStatusDisplays();
+          renderListings();
+        }
+      } catch (err) {
+        console.error('Error loading chunk for ref:', err);
+      }
+    }
+    window.streamNextMatchingChunkForRef = streamNextMatchingChunkForRef;
+
+    async function streamAllMatchingChunksForRef(refKey) {
+      const refData = referenceCatalogIndex[refKey] || getActiveReferenceData(refKey);
+      if (!refData || !refData.chunks) return;
+      const remaining = refData.chunks.filter(c => !loadedChunkIndices.has(c));
+      const loadAllBtn = document.getElementById('btnStreamAllRefChunks');
+      
+      for (let i = 0; i < remaining.length; i++) {
+        const targetChunkIdx = remaining[i];
+        if (loadAllBtn) loadAllBtn.innerHTML = `<span>⏳ Streaming ${i + 1}/${remaining.length}...</span>`;
+        try {
+          const chunk = await fetchCatalogData(`data/listings_chunk_${targetChunkIdx}.json`);
+          if (chunk && Array.isArray(chunk)) {
+            for (let j = 0; j < chunk.length; j++) {
+              ALL_LISTINGS.push(chunk[j]);
+              listingsById.set(chunk[j].id, chunk[j]);
+            }
+            loadedChunkIndices.add(targetChunkIdx);
+          }
+        } catch (e) {
+          console.warn('Stream chunk error:', e);
+        }
+      }
+      updateCatalogStatusDisplays();
+      renderListings();
+    }
+    window.streamAllMatchingChunksForRef = streamAllMatchingChunksForRef;
 
     function updateCounterUI() {
       updateCatalogStatusDisplays();
@@ -2441,6 +2591,52 @@
       document.getElementById('showingCount').textContent = pageItems.length;
       document.getElementById('totalCount').textContent = total.toLocaleString();
 
+      // Render Reference Global Count Banner
+      const refBannerEl = document.getElementById('referenceGlobalCountBanner');
+      if (refBannerEl) {
+        const refData = getActiveReferenceData(currentSearch);
+        if (refData && currentSearch) {
+          const cleanKey = (refData.reference || currentSearch).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+          const loadedMatching = filtered.length;
+          const remainingChunks = (refData.chunks || []).filter(c => !loadedChunkIndices.has(c));
+          refBannerEl.classList.remove('hidden');
+          refBannerEl.innerHTML = `
+            <div class="p-4 rounded-xl border border-[#C5A059]/50 bg-[#FAF6F0] shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-bold uppercase tracking-wider text-[#9E6B38]">${escapeHtml(refData.brand)} ${escapeHtml(refData.model)}</span>
+                  <span class="px-2 py-0.5 rounded bg-[#8A5826] text-white font-mono text-xs font-bold">${escapeHtml(refData.reference)}</span>
+                </div>
+                <div class="text-sm font-bold text-[#1C1917] mt-1">
+                  Actual Catalog Total: <span class="text-[#8A5826] text-base font-serif">${refData.total_count.toLocaleString()} Listings</span>
+                  <span class="text-xs font-normal text-[#6B7280]">(${refData.single_count.toLocaleString()} Singles · ${refData.unbundled_count.toLocaleString()} Unbundled Across ${refData.chunks.length} Chunks)</span>
+                </div>
+                <div class="text-xs text-[#78716C] mt-0.5">
+                  Displaying <strong>${loadedMatching.toLocaleString()}</strong> from active buffer · <strong>${Math.max(0, refData.total_count - loadedMatching).toLocaleString()}</strong> in background chunks
+                </div>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap shrink-0">
+                ${remainingChunks.length > 0 ? `
+                  <button id="btnStreamNextRefChunk" onclick="streamNextMatchingChunkForRef('${cleanKey}')" class="px-3.5 py-2 rounded-lg bg-[#8A5826] text-white text-xs font-bold hover:bg-[#653E23] transition flex items-center gap-1.5 shadow-xs cursor-pointer">
+                    <span>⚡ Next Matching Chunk (${refData.total_count - loadedMatching} left)</span>
+                  </button>
+                  <button id="btnStreamAllRefChunks" onclick="streamAllMatchingChunksForRef('${cleanKey}')" class="px-3.5 py-2 rounded-lg border border-[#8A5826] text-[#8A5826] text-xs font-bold hover:bg-[#8A5826] hover:text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer">
+                    <span>📥 Stream ALL ${refData.total_count.toLocaleString()} Matches</span>
+                  </button>
+                ` : `
+                  <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs">
+                    <span>✓</span>
+                    <span>All ${refData.total_count.toLocaleString()} Available Loaded</span>
+                  </span>
+                `}
+              </div>
+            </div>
+          `;
+        } else {
+          refBannerEl.classList.add('hidden');
+        }
+      }
+
       const grid = document.getElementById('cardsGrid');
 
       if (viewMode === 'list') {
@@ -2573,7 +2769,7 @@
           return `
             <article class="flex flex-col sm:flex-row rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md gap-5 min-w-0 overflow-hidden">
               <div class="w-full sm:w-56 h-56 shrink-0 overflow-hidden rounded-md bg-stone-100 cursor-pointer" onclick="openAvailabilityModal('${item.id}')">
-                ${item.image_url ? `
+                ${(item.image_url && typeof item.image_url === 'string' && item.image_url.startsWith('https://')) ? `
                   <img src="${item.image_url}" alt="${item.brand} ${item.model}" class="w-full h-full object-cover object-center transition hover:scale-105" loading="lazy" onerror="handleListingImageError(this)"/>
                 ` : `
                   <div class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
@@ -2657,7 +2853,7 @@
           <article data-listing-id="${item.id}" class="flex flex-col rounded-xl border border-[#EBE3D5] bg-[#FAF6F0] p-3 sm:p-4 shadow-xs sm:shadow-sm transition hover:-translate-y-0.5 hover:shadow-md min-w-0 overflow-hidden">
             <!-- 1. Top Image -->
             <button type="button" onclick="openAvailabilityModal('${item.id}')" class="block w-full overflow-hidden rounded-lg bg-stone-100 text-left cursor-pointer">
-              ${item.image_url ? `
+              ${(item.image_url && typeof item.image_url === 'string' && item.image_url.startsWith('https://')) ? `
                 <img alt="${item.brand} ${item.model}" class="h-[260px] sm:h-[320px] md:h-[340px] w-full object-cover object-center transition hover:scale-[1.02]" loading="lazy" src="${item.image_url}" onerror="handleListingImageError(this)"/>
               ` : `
                 <div class="h-[260px] sm:h-[320px] md:h-[340px] w-full flex flex-col items-center justify-center p-6 text-center text-[#8A5826] font-serif font-bold bg-[#F6F0E7]">
