@@ -36,7 +36,7 @@ function preparePublicAssets(root) {
     const essentialDataFiles = [
       'catalog_meta.json', 'listings_chunk_0.json',
       'dealers_directory.json', 'price_research_data.json', 'evidence_by_ref.json',
-      'verified_dealer_syndicates.json', 'all_dealer_groups.json'
+      'verified_dealer_syndicates.json', 'all_dealer_groups.json', 'reference_catalog_index.json'
     ];
     for (const df of essentialDataFiles) {
       const srcFile = path.join(dataSource, df);
